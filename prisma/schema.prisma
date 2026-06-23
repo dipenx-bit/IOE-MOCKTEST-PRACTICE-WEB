@@ -1,0 +1,160 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model User {
+  id           String   @id @default(cuid())
+  fullName     String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+
+  tests        Test[]
+  bookmarks    Bookmark[]
+  studyStats   StudyStats?
+
+  @@map("users")
+}
+
+model Subject {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  chapters  Chapter[]
+  questions Question[]
+
+  units     Unit[]
+
+  @@map("subjects")
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  subjectId String
+  unitId    String?
+  name      String
+
+  subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  unit      Unit?      @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([subjectId, name])
+  @@map("chapters")
+}
+
+model Unit {
+  id        String   @id @default(cuid())
+  subjectId String
+  name      String
+
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapters  Chapter[]
+
+  @@unique([subjectId, name])
+  @@map("units")
+}
+
+model Question {
+  id            String     @id @default(cuid())
+  subjectId     String
+  chapterId     String
+  questionText  String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctOption String     // "A" | "B" | "C" | "D"
+  explanation   String?
+  difficulty    Difficulty @default(MEDIUM)
+  marks         Int        @default(1)
+  createdAt     DateTime   @default(now())
+
+  subject       Subject        @relation(fields: [subjectId], references: [id])
+  chapter       Chapter        @relation(fields: [chapterId], references: [id])
+  testQuestions TestQuestion[]
+  bookmarks     Bookmark[]
+
+  @@map("questions")
+}
+
+model Test {
+  id              String    @id @default(cuid())
+  userId          String
+  title           String
+  totalQuestions  Int
+  totalMarks      Int
+  durationMinutes Int
+  score           Int?
+  percentage      Float?
+  completed       Boolean   @default(false)
+  startedAt       DateTime  @default(now())
+  submittedAt     DateTime?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  testQuestions TestQuestion[]
+
+  @@map("tests")
+}
+
+model TestQuestion {
+  id             String   @id @default(cuid())
+  testId         String
+  questionId     String
+  selectedAnswer String?  // "A" | "B" | "C" | "D" | null
+  isCorrect      Boolean?
+  markedReview   Boolean  @default(false)
+  orderIndex     Int      @default(0)
+
+  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([testId, questionId])
+  @@map("test_questions")
+}
+
+model Bookmark {
+  id         String   @id @default(cuid())
+  userId     String
+  questionId String
+  createdAt  DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@map("bookmarks")
+}
+
+model StudyStats {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  testsAttempted   Int      @default(0)
+  questionsSolved  Int      @default(0)
+  averageScore     Float    @default(0)
+  bestScore        Float    @default(0)
+  currentStreak    Int      @default(0)
+  lastStudiedAt    DateTime?
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("study_stats")
+}

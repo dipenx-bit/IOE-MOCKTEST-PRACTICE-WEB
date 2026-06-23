@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── ShadCN CSS Variable Tokens ─────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background:         0 0% 100%;
+    --foreground:         222.2 84% 4.9%;
+    --card:               0 0% 100%;
+    --card-foreground:    222.2 84% 4.9%;
+    --popover:            0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* Primary = IOE Blue */
+    --primary:            221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary:          210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted:              210 40% 96.1%;
+    --muted-foreground:   215.4 16.3% 46.9%;
+
+    --accent:             210 40% 96.1%;
+    --accent-foreground:  222.2 47.4% 11.2%;
+
+    --destructive:        0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border:             214.3 31.8% 91.4%;
+    --input:              214.3 31.8% 91.4%;
+    --ring:               221.2 83.2% 53.3%;
+
+    --radius: 0.5rem;
+
+    /* IOE Exam State Colors */
+    --state-answered:     142 76% 36%;   /* green */
+    --state-unanswered:   0 84% 60%;     /* red   */
+    --state-review:       38 92% 50%;    /* amber */
+    --state-not-visited:  220 13% 69%;   /* gray  */
+  }
+
+  .dark {
+    --background:         222.2 84% 4.9%;
+    --foreground:         210 40% 98%;
+    --card:               222.2 84% 4.9%;
+    --card-foreground:    210 40% 98%;
+    --popover:            222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary:            217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary:          217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted:              217.2 32.6% 17.5%;
+    --muted-foreground:   215 20.2% 65.1%;
+
+    --accent:             217.2 32.6% 17.5%;
+    --accent-foreground:  210 40% 98%;
+
+    --destructive:        0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border:             217.2 32.6% 17.5%;
+    --input:              217.2 32.6% 17.5%;
+    --ring:               224.3 76.3% 48%;
+  }
+}
+
+/* ─── Base Reset ──────────────────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+/* ─── IOE Platform Custom Utilities ──────────────────────────────────────── */
+@layer utilities {
+  /* Question palette states */
+  .q-answered {
+    @apply bg-green-500 text-white hover:bg-green-600;
+  }
+  .q-unanswered {
+    @apply bg-red-500 text-white hover:bg-red-600;
+  }
+  .q-review {
+    @apply bg-amber-500 text-white hover:bg-amber-600;
+  }
+  .q-not-visited {
+    @apply bg-gray-200 text-gray-700 hover:bg-gray-300;
+  }
+  .q-current {
+    @apply ring-2 ring-blue-600 ring-offset-2 scale-110;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden bg-gray-200 rounded;
+  }
+  .skeleton::after {
+    @apply absolute inset-0;
+    content: "";
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.6),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+    transform: translateX(-100%);
+  }
+
+  /* Score color helpers */
+  .score-excellent { @apply text-green-600; }
+  .score-good      { @apply text-blue-600; }
+  .score-average   { @apply text-amber-600; }
+  .score-poor      { @apply text-red-600; }
+
+  /* Page fade-in */
+  .page-enter {
+    @apply animate-fade-in;
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+}
+
+/* ─── Exam Interface Specific ─────────────────────────────────────────────── */
+@layer components {
+  /* Option button in exam */
+  .exam-option {
+    @apply w-full text-left px-4 py-3 rounded-lg border-2 border-gray-200
+           bg-white hover:border-blue-400 hover:bg-blue-50
+           transition-all duration-150 cursor-pointer
+           flex items-start gap-3;
+  }
+  .exam-option.selected {
+    @apply border-blue-500 bg-blue-50;
+  }
+  .exam-option.correct {
+    @apply border-green-500 bg-green-50;
+  }
+  .exam-option.wrong {
+    @apply border-red-500 bg-red-50;
+  }
+  .exam-option.correct-not-selected {
+    @apply border-green-500 bg-green-50 opacity-80;
+  }
+
+  /* Timer urgent state */
+  .timer-urgent {
+    @apply text-red-600 animate-pulse font-bold;
+  }
+
+  /* Stats card */
+  .stats-card {
+    @apply bg-white rounded-xl border border-gray-200 p-6
+           shadow-card hover:shadow-card-hover transition-shadow duration-200;
+  }
+
+  /* Section header */
+  .section-header {
+    @apply text-xl font-semibold text-gray-900 mb-4;
+  }
+
+  /* Badge variants for difficulty */
+  .badge-easy   { @apply bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full; }
+  .badge-medium { @apply bg-amber-100 text-amber-800 text-xs font-medium px-2.5 py-0.5 rounded-full; }
+  .badge-hard   { @apply bg-red-100   text-red-800   text-xs font-medium px-2.5 py-0.5 rounded-full; }
+}
+
+/* ─── Print styles (for result page) ─────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { @apply bg-white text-black; }
+}
