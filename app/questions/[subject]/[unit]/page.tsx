@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BreadcrumbNav } from "@/components/breadcrumb-nav";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function slugify(name: string) {
   return encodeURIComponent(name.toLowerCase().replace(/\s+/g, "-"));
 }
@@ -11,30 +14,46 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
-export default async function UnitPage(props: any) {
-  const { params } = props as any;
+export default async function UnitPage({
+  params,
+}: {
+  params: { subject: string; unit: string };
+}) {
   const subjectName = unslug(params.subject);
   const unitName = unslug(params.unit);
 
-  // Fetch subject and unit together
-  const subject = await prisma.subject.findFirst({
-    where: { name: { equals: subjectName, mode: "insensitive" } },
-    include: {
-      units: {
-        where: { name: { equals: unitName, mode: "insensitive" } },
-        include: {
-          chapters: { orderBy: { name: "asc" } },
-        },
+  let subject = null;
+
+  try {
+    subject = await prisma.subject.findFirst({
+      where: {
+        name: { equals: subjectName, mode: "insensitive" },
       },
-      _count: { select: { questions: true } },
-    },
-  });
+      include: {
+        units: {
+          where: {
+            name: { equals: unitName, mode: "insensitive" },
+          },
+          include: {
+            chapters: { orderBy: { name: "asc" } },
+          },
+        },
+        _count: { select: { questions: true } },
+      },
+    });
+  } catch (error) {
+    console.error("[UNIT PAGE ERROR]", error);
+  }
 
   if (!subject) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Subject Not Found</h1>
-        <p className="text-gray-600">The subject you're looking for doesn't exist.</p>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Subject Not Found
+        </h1>
+        <p className="text-gray-600">
+          The subject you're looking for doesn't exist.
+        </p>
         <Link href="/questions" className="text-blue-600 hover:underline">
           ← Back to Questions
         </Link>
@@ -47,9 +66,16 @@ export default async function UnitPage(props: any) {
   if (!unit) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">Unit Not Found</h1>
-        <p className="text-gray-600">The unit you're looking for doesn't exist.</p>
-        <Link href={`/questions/${params.subject}`} className="text-blue-600 hover:underline">
+        <h1 className="text-2xl font-bold text-gray-900">
+          Unit Not Found
+        </h1>
+        <p className="text-gray-600">
+          The unit you're looking for doesn't exist.
+        </p>
+        <Link
+          href={`/questions/${params.subject}`}
+          className="text-blue-600 hover:underline"
+        >
           ← Back to {subject.name}
         </Link>
       </div>
@@ -60,7 +86,6 @@ export default async function UnitPage(props: any) {
 
   return (
     <div className="space-y-6">
-      {/* Breadcrumb */}
       <BreadcrumbNav
         items={[
           { label: "Questions", href: "/questions" },
@@ -69,35 +94,53 @@ export default async function UnitPage(props: any) {
         ]}
       />
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{unit.name}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {unit.name}
+          </h1>
+
           <p className="text-sm text-gray-600 mt-1">
-            {chapters.length} chapter{chapters.length !== 1 ? "s" : ""}
+            {chapters.length} chapter
+            {chapters.length !== 1 ? "s" : ""}
           </p>
+
           <p className="text-xs text-gray-500 mt-1">
-            Part of <span className="font-medium text-gray-700">{subject.name}</span>
+            Part of{" "}
+            <span className="font-medium text-gray-700">
+              {subject.name}
+            </span>
           </p>
         </div>
-        <Link href={`/questions/${params.subject}`} className="text-sm text-blue-600 hover:text-blue-800 transition-colors">
+
+        <Link
+          href={`/questions/${params.subject}`}
+          className="text-sm text-blue-600 hover:text-blue-800"
+        >
           ← Back to Units
         </Link>
       </div>
 
-      {/* Chapters Grid */}
       {chapters.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-gray-500 text-base">No chapters found in this unit.</p>
+          <p className="text-gray-500">No chapters found in this unit.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {chapters.map((chapter) => (
-            <Link key={chapter.id} href={`/questions/${params.subject}/${params.unit}/${slugify(chapter.name)}`}>
-              <Card className="h-full hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer">
+            <Link
+              key={chapter.id}
+              href={`/questions/${params.subject}/${params.unit}/${slugify(
+                chapter.name
+              )}`}
+            >
+              <Card className="h-full hover:shadow-lg transition-all">
                 <CardHeader>
-                  <CardTitle className="text-lg text-gray-900">{chapter.name}</CardTitle>
+                  <CardTitle className="text-lg">
+                    {chapter.name}
+                  </CardTitle>
                 </CardHeader>
+
                 <CardContent>
                   <p className="text-sm text-gray-600">
                     Questions in this chapter
