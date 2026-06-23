@@ -14,6 +14,46 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
+async function getSubjectWithUnit(
+  subjectName: string,
+  unitName: string
+) {
+  return prisma.subject.findFirst({
+    where: {
+      name: {
+        equals: subjectName,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      units: {
+        where: {
+          name: {
+            equals: unitName,
+            mode: "insensitive",
+          },
+        },
+        include: {
+          chapters: {
+            orderBy: {
+              name: "asc",
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          questions: true,
+        },
+      },
+    },
+  });
+}
+
+type SubjectType = Awaited<
+  ReturnType<typeof getSubjectWithUnit>
+>;
+
 export default async function UnitPage({
   params,
 }: {
@@ -22,25 +62,13 @@ export default async function UnitPage({
   const subjectName = unslug(params.subject);
   const unitName = unslug(params.unit);
 
-  let subject = null;
+  let subject: SubjectType = null;
 
   try {
-    subject = await prisma.subject.findFirst({
-      where: {
-        name: { equals: subjectName, mode: "insensitive" },
-      },
-      include: {
-        units: {
-          where: {
-            name: { equals: unitName, mode: "insensitive" },
-          },
-          include: {
-            chapters: { orderBy: { name: "asc" } },
-          },
-        },
-        _count: { select: { questions: true } },
-      },
-    });
+    subject = await getSubjectWithUnit(
+      subjectName,
+      unitName
+    );
   } catch (error) {
     console.error("[UNIT PAGE ERROR]", error);
   }
@@ -51,10 +79,15 @@ export default async function UnitPage({
         <h1 className="text-2xl font-bold text-gray-900">
           Subject Not Found
         </h1>
+
         <p className="text-gray-600">
           The subject you're looking for doesn't exist.
         </p>
-        <Link href="/questions" className="text-blue-600 hover:underline">
+
+        <Link
+          href="/questions"
+          className="text-blue-600 hover:underline"
+        >
           ← Back to Questions
         </Link>
       </div>
@@ -69,9 +102,11 @@ export default async function UnitPage({
         <h1 className="text-2xl font-bold text-gray-900">
           Unit Not Found
         </h1>
+
         <p className="text-gray-600">
           The unit you're looking for doesn't exist.
         </p>
+
         <Link
           href={`/questions/${params.subject}`}
           className="text-blue-600 hover:underline"
@@ -89,7 +124,10 @@ export default async function UnitPage({
       <BreadcrumbNav
         items={[
           { label: "Questions", href: "/questions" },
-          { label: subject.name, href: `/questions/${params.subject}` },
+          {
+            label: subject.name,
+            href: `/questions/${params.subject}`,
+          },
           { label: unit.name },
         ]}
       />
@@ -123,7 +161,9 @@ export default async function UnitPage({
 
       {chapters.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-gray-500">No chapters found in this unit.</p>
+          <p className="text-gray-500">
+            No chapters found in this unit.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

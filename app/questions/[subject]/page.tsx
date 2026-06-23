@@ -14,6 +14,38 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
+async function getSubject(subjectName: string) {
+  return prisma.subject.findFirst({
+    where: {
+      name: {
+        equals: subjectName,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      units: {
+        orderBy: {
+          name: "asc",
+        },
+        include: {
+          chapters: {
+            orderBy: {
+              name: "asc",
+            },
+          },
+        },
+      },
+      _count: {
+        select: {
+          questions: true,
+        },
+      },
+    },
+  });
+}
+
+type SubjectType = Awaited<ReturnType<typeof getSubject>>;
+
 export default async function SubjectPage({
   params,
 }: {
@@ -21,23 +53,10 @@ export default async function SubjectPage({
 }) {
   const subjectName = unslug(params.subject);
 
-  let subjectData = null;
+  let subjectData: SubjectType = null;
 
   try {
-    subjectData = await prisma.subject.findFirst({
-      where: {
-        name: { equals: subjectName, mode: "insensitive" },
-      },
-      include: {
-        units: {
-          orderBy: { name: "asc" },
-          include: {
-            chapters: { orderBy: { name: "asc" } },
-          },
-        },
-        _count: { select: { questions: true } },
-      },
-    });
+    subjectData = await getSubject(subjectName);
   } catch (error) {
     console.error("[SUBJECT PAGE ERROR]", error);
   }
@@ -48,10 +67,15 @@ export default async function SubjectPage({
         <h1 className="text-2xl font-bold text-gray-900">
           Subject Not Found
         </h1>
+
         <p className="text-gray-600">
           The subject you're looking for doesn't exist.
         </p>
-        <Link href="/questions" className="text-blue-600 hover:underline">
+
+        <Link
+          href="/questions"
+          className="text-blue-600 hover:underline"
+        >
           ← Back to Questions
         </Link>
       </div>
@@ -91,7 +115,9 @@ export default async function SubjectPage({
 
       {units.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-gray-500">No units found for this subject.</p>
+          <p className="text-gray-500">
+            No units found for this subject.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -126,7 +152,7 @@ export default async function SubjectPage({
                 </div>
               </CardHeader>
 
-              {unit.chapters?.length > 0 && (
+              {(unit.chapters?.length ?? 0) > 0 && (
                 <CardContent>
                   <div className="grid gap-2">
                     {unit.chapters.map((chapter) => (

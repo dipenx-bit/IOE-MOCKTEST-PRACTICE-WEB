@@ -17,6 +17,50 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
+async function getSubject(subjectName: string) {
+  return prisma.subject.findFirst({
+    where: {
+      name: {
+        equals: subjectName,
+        mode: "insensitive",
+      },
+    },
+  });
+}
+
+async function getUnit(unitName: string, subjectId: string) {
+  return prisma.unit.findFirst({
+    where: {
+      name: {
+        equals: unitName,
+        mode: "insensitive",
+      },
+      subjectId,
+    },
+  });
+}
+
+async function getChapter(
+  chapterName: string,
+  subjectId: string,
+  unitId: string
+) {
+  return prisma.chapter.findFirst({
+    where: {
+      name: {
+        equals: chapterName,
+        mode: "insensitive",
+      },
+      subjectId,
+      unitId,
+    },
+  });
+}
+
+type SubjectType = Awaited<ReturnType<typeof getSubject>>;
+type UnitType = Awaited<ReturnType<typeof getUnit>>;
+type ChapterType = Awaited<ReturnType<typeof getChapter>>;
+
 export default async function ChapterPage({
   params,
   searchParams,
@@ -32,12 +76,10 @@ export default async function ChapterPage({
   const pageSize = 20;
   const keyword = searchParams.q ?? undefined;
 
-  let subject = null;
+  let subject: SubjectType = null;
 
   try {
-    subject = await prisma.subject.findFirst({
-      where: { name: { equals: subjectName, mode: "insensitive" } },
-    });
+    subject = await getSubject(subjectName);
   } catch (e) {
     console.error("[CHAPTER PAGE - SUBJECT]", e);
   }
@@ -51,15 +93,10 @@ export default async function ChapterPage({
     );
   }
 
-  let unit = null;
+  let unit: UnitType = null;
 
   try {
-    unit = await prisma.unit.findFirst({
-      where: {
-        name: { equals: unitName, mode: "insensitive" },
-        subjectId: subject.id,
-      },
-    });
+    unit = await getUnit(unitName, subject.id);
   } catch (e) {
     console.error("[CHAPTER PAGE - UNIT]", e);
   }
@@ -73,16 +110,14 @@ export default async function ChapterPage({
     );
   }
 
-  let chapter = null;
+  let chapter: ChapterType = null;
 
   try {
-    chapter = await prisma.chapter.findFirst({
-      where: {
-        name: { equals: chapterName, mode: "insensitive" },
-        subjectId: subject.id,
-        unitId: unit.id,
-      },
-    });
+    chapter = await getChapter(
+      chapterName,
+      subject.id,
+      unit.id
+    );
   } catch (e) {
     console.error("[CHAPTER PAGE - CHAPTER]", e);
   }
@@ -98,7 +133,7 @@ export default async function ChapterPage({
     );
   }
 
-  const where: any = {
+  const where: Record<string, any> = {
     subjectId: subject.id,
     chapterId: chapter.id,
   };
@@ -113,14 +148,19 @@ export default async function ChapterPage({
     ];
   }
 
-  let questions: any[] = [];
+  let questions: Awaited<
+    ReturnType<typeof prisma.question.findMany>
+  > = [];
+
   let total = 0;
 
   try {
     [questions, total] = await Promise.all([
       prisma.question.findMany({
         where,
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: "desc",
+        },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -145,25 +185,31 @@ export default async function ChapterPage({
 
       <div>
         <h1 className="text-3xl font-bold">{chapter.name}</h1>
-        <p className="text-sm text-gray-600">{total} questions</p>
+        <p className="text-sm text-gray-600">
+          {total} questions
+        </p>
       </div>
 
-      {/* Search */}
       <Card>
         <CardContent className="p-4">
           <form className="flex gap-2" method="GET">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-2 h-4 w-4 text-gray-400" />
-              <Input name="q" defaultValue={keyword ?? ""} />
+              <Input
+                name="q"
+                defaultValue={keyword ?? ""}
+              />
             </div>
-            <Button type="submit">Search</Button>
+
+            <Button type="submit">
+              Search
+            </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* Questions */}
       <div className="space-y-4">
-        {questions.map((q, i) => (
+        {questions.map((q) => (
           <Card key={q.id}>
             <CardHeader>
               <p>{q.questionText}</p>
@@ -172,7 +218,6 @@ export default async function ChapterPage({
         ))}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex gap-4">
           {page > 1 && (

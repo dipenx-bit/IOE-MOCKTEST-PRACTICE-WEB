@@ -15,18 +15,28 @@ async function getSubjects() {
     include: {
       units: {
         include: {
-          chapters: { orderBy: { name: "asc" } },
+          chapters: {
+            orderBy: { name: "asc" },
+          },
         },
         orderBy: { name: "asc" },
       },
-      _count: { select: { questions: true } },
+      _count: {
+        select: {
+          questions: true,
+        },
+      },
     },
-    orderBy: { name: "asc" },
+    orderBy: {
+      name: "asc",
+    },
   });
 }
 
+type SubjectsType = Awaited<ReturnType<typeof getSubjects>>;
+
 export default async function QuestionsIndexPage() {
-  let subjects = [];
+  let subjects: SubjectsType = [];
 
   try {
     subjects = await getSubjects();
@@ -61,12 +71,16 @@ export default async function QuestionsIndexPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {subjects.map((s) => (
-          <Link key={s.id} href={`/questions/${slugify(s.name)}`}>
+          <Link
+            key={s.id}
+            href={`/questions/${slugify(s.name)}`}
+          >
             <Card className="h-full hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer">
               <CardHeader>
                 <CardTitle className="text-xl text-gray-900">
                   {s.name}
                 </CardTitle>
+
                 <p className="text-sm text-gray-600 mt-2">
                   {s._count?.questions ?? 0} questions
                 </p>
@@ -87,11 +101,19 @@ export default async function QuestionsIndexPage() {
                         <span className="text-gray-800 font-medium truncate">
                           {u.name}
                         </span>
+
                         <span className="text-xs text-gray-500">
                           {(u.chapters ?? []).length} c
                         </span>
                       </div>
                     ))}
+
+                    {(s.units ?? []).length > 4 && (
+                      <p className="text-xs text-gray-500 p-2">
+                        +{(s.units ?? []).length - 4} more unit
+                        {(s.units ?? []).length - 4 !== 1 ? "s" : ""}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -102,7 +124,9 @@ export default async function QuestionsIndexPage() {
 
       {subjects.length === 0 && (
         <div className="py-12 text-center">
-          <p className="text-gray-500">No subjects found yet.</p>
+          <p className="text-gray-500">
+            No subjects found yet.
+          </p>
         </div>
       )}
     </div>
