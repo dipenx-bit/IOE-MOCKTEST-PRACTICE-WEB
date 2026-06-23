@@ -378,20 +378,30 @@ async function main() {
 
   // ── 1. Create Admin User ────────────────────────────────────────────────────
   console.log("👤 Creating admin user...");
-  const adminHash = await bcrypt.hash("Admin@1234", 12);
-  await prisma.user.upsert({
-    where: { email: "admin@ioe.edu.np" },
-    update: {},
-    create: {
-      fullName:     "IOE Admin",
-      email:        "admin@ioe.edu.np",
-      passwordHash: adminHash,
-      role:         "ADMIN",
-      dateOfBirth:  new Date('1980-01-01'),
-      sex:          'MALE',
-      collegeName:  'IOE',
-    },
-  });
+
+const adminEmail = "dipenbudhathoki70@gmail.com";
+const adminPassword = "@lucifer_69";
+
+const adminHash = await bcrypt.hash(adminPassword, 12);
+
+await prisma.user.upsert({
+  where: { email: adminEmail },
+  update: {
+    passwordHash: adminHash,
+    role: "ADMIN",
+    dateOfBirth: new Date("2008-09-09"),
+    collegeName: "Viswa Niketan Secondary College",
+  },
+  create: {
+    fullName: "IOE Admin",
+    email: adminEmail,
+    passwordHash: adminHash,
+    role: "ADMIN",
+    dateOfBirth: new Date("2008-09-09"),
+    sex: "MALE",
+    collegeName: "Viswa Niketan Secondary College",
+  },
+});
 
   // ── 2. Create Demo Student ──────────────────────────────────────────────────
   console.log("👤 Creating demo student...");

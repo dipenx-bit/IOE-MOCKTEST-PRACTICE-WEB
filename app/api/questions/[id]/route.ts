@@ -111,7 +111,18 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: "Question not found" }, { status: 404 });
     }
 
-    await prisma.question.delete({ where: { id: params.id } });
+    // Remove dependent rows and delete question in a single transaction to avoid FK issues.
+    // Explicitly delete bookmarks too (even though Bookmark.question has onDelete: Cascade)
+    try {
+      await prisma.$transaction([
+        prisma.testQuestion.deleteMany({ where: { questionId: params.id } }),
+        prisma.bookmark.deleteMany({ where: { questionId: params.id } }),
+        prisma.question.delete({ where: { id: params.id } }),
+      ]);
+    } catch (dbErr: any) {
+      console.error("[QUESTION DELETE - DB ERROR]", dbErr);
+      return NextResponse.json({ success: false, error: dbErr?.message ?? "DB error" }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, message: "Question deleted successfully" });
   } catch (error: any) {
