@@ -1,7 +1,9 @@
 // app/login/page.tsx
 "use client";
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { useForm } from "react-hook-form";
@@ -15,8 +17,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 export default function LoginPage() {
   const router       = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl  = searchParams.get("callbackUrl") ?? "/dashboard";
+  const [callbackUrl, setCallbackUrl] = useState("/dashboard");
+
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      setCallbackUrl(sp.get("callbackUrl") ?? "/dashboard");
+    } catch {}
+  }, []);
 
   const [showPassword, setShowPassword] = useState(false);
   const [serverError,  setServerError]  = useState("");
@@ -146,18 +154,13 @@ export default function LoginPage() {
 
           <CardFooter className="flex flex-col gap-3 pt-0">
             <p className="text-sm text-gray-500 text-center">
-              Don&apos;t have an account?{" "}
+              Don&apos;t have an account? {" "}
               <Link href="/register" className="text-blue-600 font-medium hover:underline">
                 Create account
               </Link>
             </p>
 
-            {/* Demo credentials */}
-            <div className="w-full rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
-              <p className="font-semibold text-gray-700">Demo Credentials</p>
-              <p>🔑 Admin: <span className="font-mono">admin@ioe.edu.np</span> / <span className="font-mono">Admin@1234</span></p>
-              <p>🎓 Student: <span className="font-mono">student@ioe.edu.np</span> / <span className="font-mono">Student@1234</span></p>
-            </div>
+            {/* Google sign-in removed */}
           </CardFooter>
         </Card>
       </div>

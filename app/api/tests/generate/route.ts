@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { subjectIds, chapterIds, questionCount, difficulty, durationMinutes, title } = parsed.data;
+    const { subjectIds, chapterIds, questionCount, difficulty, durationMinutes, negativeMarking, title } = parsed.data;
 
     // ── Build question filter ─────────────────────────────────────────────────
     const where: any = { subjectId: { in: subjectIds } };
@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
           totalQuestions: questionCount,
           totalMarks,
           durationMinutes,
+          negativeMarking: negativeMarking ?? 0,
           completed:      false,
         },
       });

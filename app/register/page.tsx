@@ -119,6 +119,37 @@ export default function RegisterPage() {
                   )}
                 </div>
 
+                {/* Date of birth */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="dateOfBirth">Date of birth</Label>
+                  <Input id="dateOfBirth" type="date" {...register("dateOfBirth")} />
+                  {errors.dateOfBirth && (
+                    <p className="text-xs text-red-600">{errors.dateOfBirth.message}</p>
+                  )}
+                </div>
+
+                {/* Sex */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="sex">Sex</Label>
+                  <select id="sex" {...register("sex")} className="w-full rounded-md border px-3 py-2">
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                  {errors.sex && (
+                    <p className="text-xs text-red-600">{errors.sex.message}</p>
+                  )}
+                </div>
+
+                {/* College name */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="collegeName">College Name</Label>
+                  <Input id="collegeName" type="text" placeholder="Your college" {...register("collegeName")} />
+                  {errors.collegeName && (
+                    <p className="text-xs text-red-600">{errors.collegeName.message}</p>
+                  )}
+                </div>
+
                 {/* Password */}
                 <div className="space-y-1.5">
                   <Label htmlFor="password">Password</Label>

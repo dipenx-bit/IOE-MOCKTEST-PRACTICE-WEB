@@ -1,14 +1,15 @@
 // app/api/tests/[id]/answer/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { answerSchema, markReviewSchema } from "@/lib/validations";
 
 // POST /api/tests/[id]/answer — save a student's answer
 export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
     if (session.user.role !== "STUDENT") {
@@ -63,9 +64,10 @@ export async function POST(
 
 // PATCH /api/tests/[id]/answer — toggle mark for review
 export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
     if (session.user.role !== "STUDENT") {

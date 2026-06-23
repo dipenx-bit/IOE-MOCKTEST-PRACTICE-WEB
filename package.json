@@ -27,6 +27,7 @@
     "db:reset": "prisma migrate reset --force && tsx prisma/seed.ts",
     "migrate:orphans": "node prisma/migrate-orphan-questions.js"
   },
+  "postinstall": "prisma generate",
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.2",
     "@hookform/resolvers": "^3.9.1",
@@ -56,7 +57,7 @@
     "csv-parse": "^5.5.6",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.468.0",
-    "next": "15.0.4",
+    "next": "16.2.9",
     "next-auth": "^5.0.0-beta.25",
     "papaparse": "^5.4.1",
     "react": "^18.3.1",
@@ -73,8 +74,8 @@
     "@types/papaparse": "^5.3.14",
     "@types/react": "^18.3.13",
     "@types/react-dom": "^18.3.1",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "15.0.4",
+    "eslint": "^9.9.0",
+    "eslint-config-next": "16.2.9",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

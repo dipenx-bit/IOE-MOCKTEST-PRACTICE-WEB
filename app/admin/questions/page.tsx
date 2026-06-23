@@ -37,6 +37,7 @@ import { cn, truncate } from "@/lib/utils";
 interface Subject {
   id: string; name: string;
   chapters: { id: string; name: string }[];
+  units?: { id: string; name: string; chapters?: { id: string; name: string }[] }[];
 }
 interface Question {
   id: string; questionText: string; optionA: string; optionB: string;
@@ -607,7 +608,7 @@ export default function AdminQuestionsPage() {
                           <div key={c.id} className="flex items-center justify-between p-1.5 bg-gray-50 rounded hover:bg-gray-100 transition-colors">
                             <span className="text-xs text-gray-700">{c.name}</span>
                             <Button
-                              size="xs"
+                              size="sm"
                               variant="ghost"
                               onClick={() => handleAddForChapter(s.id, c.id)}
                               className="h-6 px-2 text-blue-600 hover:text-blue-800"

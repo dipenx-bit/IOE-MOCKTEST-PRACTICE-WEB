@@ -1,13 +1,14 @@
 // app/api/tests/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
 // GET /api/tests/[id] — load test for exam interface
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
 

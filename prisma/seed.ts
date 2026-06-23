@@ -387,6 +387,9 @@ async function main() {
       email:        "admin@ioe.edu.np",
       passwordHash: adminHash,
       role:         "ADMIN",
+      dateOfBirth:  new Date('1980-01-01'),
+      sex:          'MALE',
+      collegeName:  'IOE',
     },
   });
 
@@ -401,6 +404,10 @@ async function main() {
       email:        "student@ioe.edu.np",
       passwordHash: studentHash,
       role:         "STUDENT",
+      verified:     true,
+      dateOfBirth:  new Date('2005-01-01'),
+      sex:          'MALE',
+      collegeName:  'Demo College',
     },
   });
 

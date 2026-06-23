@@ -22,6 +22,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Only students can take mock tests" }, { status: 403 });
     }
 
+    // Fetch active mock format (admin-configured)
+    const activeFormat = await prisma.mockFormat.findFirst({ where: { active: true }, orderBy: { createdAt: 'desc' } });
+    const marksPerSubjectInput: Record<string, number> = activeFormat?.marksPerSubject as any ?? {};
+    const negativeMarking: number = typeof activeFormat?.negativeMark === "number" ? activeFormat!.negativeMark : 0;
+    const requestedDuration: number = typeof activeFormat?.durationMinutes === "number" ? activeFormat!.durationMinutes : TOTAL_DURATION;
+
     // ── Fetch subjects ────────────────────────────────────────────────────────
     const subjects = await prisma.subject.findMany({
       where: { name: { in: Object.keys(IOE_DISTRIBUTION) } },
@@ -72,7 +78,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const totalMarks = allSelected.reduce((sum, q) => sum + q.marks, 0);
+    // Compute total marks using either question.marks OR provided marksPerSubject override
+    let totalMarks = 0;
+    for (const subject of subjects) {
+      const required = IOE_DISTRIBUTION[subject.name];
+      const perMark = typeof marksPerSubjectInput[subject.name] === 'number' ? Math.max(0, Math.floor(marksPerSubjectInput[subject.name])) : 1;
+      totalMarks += perMark * required;
+    }
 
     // ── Shuffle final order ───────────────────────────────────────────────────
     const shuffledAll = shuffle(allSelected);
@@ -85,12 +97,14 @@ export async function POST(req: NextRequest) {
     const test = await prisma.$transaction(async (tx) => {
       const newTest = await tx.test.create({
         data: {
-          userId:         session.user.id,
-          title:          `IOE Full Mock Test — ${month} ${year}`,
-          totalQuestions: TOTAL_QUESTIONS,
+          userId:          session.user.id,
+          title:           `IOE Full Mock Test — ${month} ${year}`,
+          totalQuestions:  TOTAL_QUESTIONS,
           totalMarks,
-          durationMinutes: TOTAL_DURATION,
-          completed:      false,
+          durationMinutes: requestedDuration,
+          marksPerSubject: marksPerSubjectInput,
+          negativeMarking: negativeMarking,
+          completed:       false,
         },
       });
 
@@ -112,7 +126,9 @@ export async function POST(req: NextRequest) {
         title:       test.title,
         distribution: IOE_DISTRIBUTION,
         totalQuestions: TOTAL_QUESTIONS,
-        durationMinutes: TOTAL_DURATION,
+        durationMinutes: requestedDuration,
+        marksPerSubject: marksPerSubjectInput,
+        negativeMarking,
       },
       message: "IOE Mock Test generated successfully",
     }, { status: 201 });

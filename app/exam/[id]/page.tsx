@@ -303,6 +303,8 @@ export default function ExamPage() {
   }
 
   const q = current.question;
+  const marksPerSubjectPersisted: Record<string, number> = (test as any).marksPerSubject ?? {};
+  const negativeMarkPersisted: number = (test as any).negativeMarking ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -373,10 +375,19 @@ export default function ExamPage() {
                   {q.difficulty.toLowerCase()}
                 </Badge>
                 <Badge variant="secondary" className="text-xs ml-auto">
-                  {q.marks} mark{q.marks > 1 ? "s" : ""}
+                  {(() => {
+                    const per = q.subject?.name && typeof marksPerSubjectPersisted[q.subject.name] === 'number'
+                      ? marksPerSubjectPersisted[q.subject.name]
+                      : q.marks;
+                    return `${per} mark${per > 1 ? 's' : ''}`;
+                  })()}
                 </Badge>
               </div>
 
+          {/* Negative marking indicator */}
+          <div className="ml-4 text-sm text-gray-500">
+            {negativeMarkPersisted > 0 ? `Negative: -${negativeMarkPersisted} per wrong` : "No negative marking"}
+          </div>
               {/* Question text */}
               <p className="text-gray-900 text-base leading-relaxed mb-6 whitespace-pre-wrap">
                 {q.questionText}

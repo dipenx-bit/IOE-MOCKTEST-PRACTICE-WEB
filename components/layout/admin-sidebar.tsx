@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, HelpCircle, BookOpen, Users,
-  BarChart2, LogOut, ShieldCheck, Menu, X, Upload,
+  BarChart2, LogOut, ShieldCheck, Menu, X, Upload, FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ const NAV_ITEMS = [
   { href: "/admin/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
   { href: "/admin/questions",  label: "Questions",  icon: HelpCircle      },
   { href: "/admin/subjects",   label: "Subjects",   icon: BookOpen        },
+  { href: "/admin/mock-format", label: "Mock Format", icon: FlaskConical   },
+  { href: "/admin/verify",     label: "Verifications", icon: ShieldCheck    },
   { href: "/admin/students",   label: "Students",   icon: Users           },
 ];
 

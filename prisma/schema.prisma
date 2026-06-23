@@ -14,6 +14,12 @@ enum Role {
   STUDENT
 }
 
+enum Sex {
+  MALE
+  FEMALE
+  OTHER
+}
+
 enum Difficulty {
   EASY
   MEDIUM
@@ -25,8 +31,12 @@ model User {
   fullName     String
   email        String   @unique
   passwordHash String
+  verified     Boolean  @default(false)
   role         Role     @default(STUDENT)
   createdAt    DateTime @default(now())
+  dateOfBirth  DateTime
+  sex          Sex
+  collegeName  String
 
   tests        Test[]
   bookmarks    Bookmark[]
@@ -102,6 +112,8 @@ model Test {
   totalQuestions  Int
   totalMarks      Int
   durationMinutes Int
+  marksPerSubject Json?
+  negativeMarking Float?    @default(0)
   score           Int?
   percentage      Float?
   completed       Boolean   @default(false)
@@ -112,6 +124,18 @@ model Test {
   testQuestions TestQuestion[]
 
   @@map("tests")
+}
+
+model MockFormat {
+  id              String   @id @default(cuid())
+  name            String
+  marksPerSubject Json
+  negativeMark    Float    @default(0)
+  durationMinutes Int      @default(120)
+  active          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@map("mock_formats")
 }
 
 model TestQuestion {

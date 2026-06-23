@@ -6,7 +6,13 @@ import { registerSchema } from "@/lib/validations";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      console.error('[REGISTER] Invalid JSON payload', e);
+      return NextResponse.json({ success: false, error: 'Invalid JSON payload' }, { status: 400 });
+    }
 
     // ── Validate input ────────────────────────────────────────────────────────
     const parsed = registerSchema.safeParse(body);
@@ -21,7 +27,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { fullName, email, password } = parsed.data;
+    const { fullName, email, password, dateOfBirth, sex, collegeName } = parsed.data;
     const normalizedEmail = email.toLowerCase().trim();
 
     // ── Check if email already exists ─────────────────────────────────────────
@@ -47,6 +53,10 @@ export async function POST(req: NextRequest) {
           email:        normalizedEmail,
           passwordHash,
           role:         "STUDENT",
+          verified:     false,
+          dateOfBirth:  new Date(dateOfBirth),
+          sex:          sex as any,
+          collegeName:  collegeName.trim(),
         },
         select: {
           id:        true,
@@ -68,13 +78,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        message: "Account created successfully",
+        message: "Account created successfully. Your account will be activated after admin verification.",
         user,
       },
       { status: 201 }
     );
-  } catch (error) {
-    console.error("[REGISTER]", error);
+  } catch (error: any) {
+    console.error("[REGISTER] Unexpected error", error && (error.stack || error));
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

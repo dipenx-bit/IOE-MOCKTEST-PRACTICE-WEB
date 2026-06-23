@@ -14,19 +14,8 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
-interface ChapterPageParams {
-  params: {
-    subject: string;
-    unit: string;
-    chapter: string;
-  };
-  searchParams: {
-    page?: string;
-    q?: string;
-  };
-}
-
-export default async function ChapterPage({ params, searchParams }: ChapterPageParams) {
+export default async function ChapterPage(props: any) {
+  const { params, searchParams } = props as any;
   const subjectName = unslug(params.subject);
   const unitName = unslug(params.unit);
   const chapterName = unslug(params.chapter);

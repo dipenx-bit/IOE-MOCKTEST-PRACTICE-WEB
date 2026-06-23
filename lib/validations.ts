@@ -22,6 +22,12 @@ export const registerSchema = z
       .string()
       .min(1, "Email is required")
       .email("Invalid email address"),
+    dateOfBirth: z
+      .string()
+      .min(1, "Date of birth is required")
+      .refine((v) => !isNaN(Date.parse(v)), { message: "Invalid date" }),
+    sex: z.enum(["MALE", "FEMALE", "OTHER"]),
+    collegeName: z.string().min(2, "College name must be at least 2 characters"),
     password: z
       .string()
       .min(6, "Password must be at least 6 characters")
@@ -150,6 +156,12 @@ export const practiceSetSchema = z.object({
     .refine((v) => [15, 30, 60, 120].includes(v), {
       message: "Duration must be 15, 30, 60, or 120 minutes",
     }),
+  negativeMarking: z
+    .number()
+    .min(0)
+    .max(10)
+    .optional()
+    .default(0),
   title: z.string().max(200).optional(),
 });
 

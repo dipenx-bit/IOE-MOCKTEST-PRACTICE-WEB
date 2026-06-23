@@ -23,13 +23,7 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    role: Role;
-    fullName: string;
-  }
-}
+// Note: omitting augmentation for "next-auth/jwt" to avoid environment-specific type resolution issues.
 
 // ─── Validation schema for credentials ───────────────────────────────────────
 const loginSchema = z.object({
@@ -81,9 +75,15 @@ export const authConfig: NextAuthConfig = {
 
           if (!user) return null;
 
+          // Ensure student accounts are verified by an admin before allowing sign-in
+          if (user.role === "STUDENT" && user.verified === false) {
+            console.warn('[auth] student attempted sign-in before verification:', email);
+            // Throw a distinct error so the UI can surface a clear message to the user
+            throw new Error('ACCOUNT_NOT_VERIFIED');
+          }
+
           // Verify password
           const isValid = await bcrypt.compare(password, user.passwordHash);
-          
           if (!isValid) return null;
 
           return {
@@ -113,9 +113,10 @@ export const authConfig: NextAuthConfig = {
 
     async session({ session, token }) {
       if (token) {
-        session.user.id       = token.id;
-        session.user.role     = token.role;
-        session.user.fullName = token.fullName;
+        const t = token as any;
+        session.user.id       = t.id;
+        session.user.role     = t.role;
+        session.user.fullName = t.fullName;
       }
       return session;
     },

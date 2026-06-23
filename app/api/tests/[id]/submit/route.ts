@@ -1,12 +1,13 @@
 // app/api/tests/[id]/submit/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 
 export async function POST(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
     if (session.user.role !== "STUDENT") {
@@ -22,7 +23,7 @@ export async function POST(
         testQuestions: {
           include: {
             question: {
-              select: { correctOption: true, marks: true },
+              select: { correctOption: true, marks: true, subject: { select: { name: true } } },
             },
           },
         },
@@ -33,21 +34,35 @@ export async function POST(
     if (test.userId !== session.user.id) return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     if (test.completed) return NextResponse.json({ success: false, error: "Test already submitted" }, { status: 409 });
 
-    // ── Grade each question ───────────────────────────────────────────────────
+    // ── Grade each question using persisted marksPerSubject and negativeMarking ─
     let score        = 0;
     let correctCount = 0;
     let wrongCount   = 0;
     let skippedCount = 0;
 
+    const marksPerSubject: Record<string, number> = (test as any).marksPerSubject ?? {};
+    const negativeMark: number = (test as any).negativeMarking ?? 0;
+
     const gradedQuestions = test.testQuestions.map((tq) => {
       const isAnswered = !!tq.selectedAnswer;
-      const isCorrect  = isAnswered
-        ? tq.selectedAnswer === tq.question.correctOption
-        : null;
+      const isCorrect  = isAnswered ? tq.selectedAnswer === tq.question.correctOption : null;
 
-      if (!isAnswered)      skippedCount++;
-      else if (isCorrect)  { correctCount++; score += tq.question.marks; }
-      else                   wrongCount++;
+      // Determine per-question marks: prefer persisted per-subject override, else question.marks
+      const subjectName = tq.question.subject?.name ?? null;
+      const perMark = subjectName && typeof marksPerSubject[subjectName] === 'number'
+        ? Math.max(0, Math.floor(marksPerSubject[subjectName]))
+        : tq.question.marks ?? 1;
+
+      if (!isAnswered) {
+        skippedCount++;
+      } else if (isCorrect) {
+        correctCount++;
+        score += perMark;
+      } else {
+        wrongCount++;
+        // Apply negative marking (subtract); ensure score stays consistent (can go negative)
+        score -= Math.abs(Number(negativeMark ?? 0));
+      }
 
       return {
         where: { id: tq.id },

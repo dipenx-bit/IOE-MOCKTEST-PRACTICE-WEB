@@ -11,14 +11,8 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
-interface UnitPageParams {
-  params: {
-    subject: string;
-    unit: string;
-  };
-}
-
-export default async function UnitPage({ params }: UnitPageParams) {
+export default async function UnitPage(props: any) {
+  const { params } = props as any;
   const subjectName = unslug(params.subject);
   const unitName = unslug(params.unit);
 

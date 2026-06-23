@@ -1,6 +1,6 @@
 // app/mock-test/page.tsx
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FlaskConical, Clock, BookOpen, ChevronRight,
@@ -12,16 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 
 const IOE_DISTRIBUTION = [
-  { subject: "Mathematics", questions: 40, color: "bg-blue-100   text-blue-700   border-blue-200"   },
-  { subject: "Physics",     questions: 30, color: "bg-purple-100 text-purple-700 border-purple-200" },
-  { subject: "Chemistry",   questions: 20, color: "bg-green-100  text-green-700  border-green-200"  },
-  { subject: "English",     questions: 10, color: "bg-amber-100  text-amber-700  border-amber-200"  },
+  { subject: "Mathematics", questions: 35, color: "bg-blue-100   text-blue-700   border-blue-200"   },
+  { subject: "Physics",     questions: 27, color: "bg-purple-100 text-purple-700 border-purple-200" },
+  { subject: "Chemistry",   questions: 22, color: "bg-green-100  text-green-700  border-green-200"  },
+  { subject: "English",     questions: 16, color: "bg-amber-100  text-amber-700  border-amber-200"  },
 ];
 
 const RULES = [
   "Total 100 questions in 120 minutes",
   "Each question carries 1 mark",
-  "No negative marking",
+  "Negative marking of 0.05 per wrong answer",
   "Questions are randomly selected each attempt",
   "Timer continues even if you close the browser",
   "Test auto-submits when timer reaches zero",
@@ -31,6 +31,8 @@ export default function MockTestPage() {
   const router       = useRouter();
   const [loading, setLoading] = useState(false);
   const [agreed,  setAgreed]  = useState(false);
+  const [activeFormat, setActiveFormat] = useState<any | null>(null);
+  // Students no longer select marks/negative/duration — admin configures formats.
 
   async function handleStart() {
     if (!agreed) {
@@ -40,11 +42,7 @@ export default function MockTestPage() {
 
     setLoading(true);
     try {
-      const res  = await fetch("/api/tests/mock", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({}),
-      });
+      const res  = await fetch("/api/tests/mock", { method: "POST" });
       const json = await res.json();
 
       if (!res.ok) {
@@ -60,6 +58,20 @@ export default function MockTestPage() {
       setLoading(false);
     }
   }
+
+  // Fetch active admin format to display
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/mock-format');
+        if (!res.ok) return;
+        const j = await res.json();
+        setActiveFormat(j.data.format ?? null);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
 
   return (
     <div className="space-y-6 page-enter max-w-3xl">
@@ -126,14 +138,27 @@ export default function MockTestPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2">
-                {RULES.map((rule, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
-                    {rule}
-                  </li>
-                ))}
-              </ul>
+                <div className="space-y-3">
+                  <ul className="space-y-2">
+                    {RULES.map((rule, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                        {rule}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="pt-2">
+                    <p className="text-sm font-medium text-gray-800">Format is configured by admin.</p>
+                    {activeFormat && (
+                      <div className="mt-2 text-sm text-gray-600">
+                        <p className="font-semibold">Active Format: {activeFormat.name}</p>
+                        <p>Duration: {activeFormat.durationMinutes} minutes</p>
+                        <p>Negative mark: {activeFormat.negativeMark}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
             </CardContent>
           </Card>
 

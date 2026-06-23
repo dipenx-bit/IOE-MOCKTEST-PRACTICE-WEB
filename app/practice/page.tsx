@@ -19,6 +19,7 @@ interface Subject {
   id:       string;
   name:     string;
   chapters: { id: string; name: string }[];
+  units?: { id: string; name: string; chapters: { id: string; name: string }[] }[];
   _count:   { questions: number };
 }
 
@@ -77,7 +78,10 @@ export default function PracticePage() {
   const [questionCount,      setQuestionCount]      = useState<number>(20);
   const [difficulty,         setDifficulty]         = useState<Difficulty>("MIXED");
   const [duration,           setDuration]           = useState<Duration>(30);
+  const [negativeMarking,    setNegativeMarking]    = useState<number>(0);
+  const [allowNegative,      setAllowNegative]      = useState<boolean>(false);
   const [isGenerating,       setIsGenerating]       = useState(false);
+  const [selectedUnits,      setSelectedUnits]      = useState<string[]>([]);
 
   // ── Fetch subjects ───────────────────────────────────────────────────────────
   const { data: subjectsData, isLoading } = useQuery<{ success: boolean; data: Subject[] }>({
@@ -94,7 +98,10 @@ export default function PracticePage() {
   // ── Available chapters based on selected subjects ────────────────────────────
   const availableChapters = subjects
     .filter((s) => selectedSubjects.includes(s.id))
-    .flatMap((s) => s.chapters.map((c) => ({ ...c, subjectName: s.name })));
+    .flatMap((s) => [
+      ...s.chapters.map((c) => ({ ...c, subjectName: s.name, unitName: undefined })),
+      ...(s.units ?? []).flatMap((u) => u.chapters.map((c) => ({ ...c, subjectName: s.name, unitName: u.name, unitId: u.id }))),
+    ]);
 
   // Reset chapters when subjects change
   useEffect(() => {
@@ -114,6 +121,15 @@ export default function PracticePage() {
     setSelectedChapters((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
     );
+  }
+
+  function toggleUnit(unitId: string, chapterIds: string[]) {
+    setSelectedUnits((prev) => prev.includes(unitId) ? prev.filter(u => u !== unitId) : [...prev, unitId]);
+    setSelectedChapters((prev) => {
+      const hasAll = chapterIds.every(id => prev.includes(id));
+      if (hasAll) return prev.filter(id => !chapterIds.includes(id));
+      return Array.from(new Set([...prev, ...chapterIds]));
+    });
   }
 
   function toggleAllChapters() {
@@ -137,12 +153,13 @@ export default function PracticePage() {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
-          subjectIds:      selectedSubjects,
-          chapterIds:      selectedChapters,
-          questionCount,
-          difficulty,
-          durationMinutes: duration,
-        }),
+              subjectIds:      selectedSubjects,
+              chapterIds:      selectedChapters,
+              questionCount,
+              difficulty,
+              durationMinutes: duration,
+              negativeMarking: allowNegative ? negativeMarking : 0,
+            }),
       });
       const json = await res.json();
 
@@ -361,6 +378,37 @@ export default function PracticePage() {
               </OptionButton>
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Negative marking */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">{availableChapters.length > 0 ? "6" : "5"}</span>
+            <Clock className="h-4 w-4 text-blue-600" />
+            Negative Marking
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={allowNegative} onChange={(e) => setAllowNegative(e.target.checked)} className="h-4 w-4" />
+              <span className="text-sm">Enable negative marking</span>
+            </label>
+            {allowNegative && (
+              <input
+                type="number"
+                step="0.25"
+                min={0}
+                max={10}
+                value={negativeMarking}
+                onChange={(e) => setNegativeMarking(Number(e.target.value))}
+                className="w-28 px-3 py-2 border rounded-lg"
+              />
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">If enabled, this value will be subtracted for each incorrect answer.</p>
         </CardContent>
       </Card>
 

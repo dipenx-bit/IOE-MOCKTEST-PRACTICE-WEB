@@ -11,8 +11,9 @@ function unslug(slug: string) {
   return decodeURIComponent(slug).replace(/-/g, " ");
 }
 
-export default async function SubjectPage({ params }: { params: { subject: string } }) {
-  const { subject } = await params;
+export default async function SubjectPage(props: any) {
+  const { params } = props as any;
+  const { subject } = params;
   const subjectName = unslug(subject);
   const subjectData = await prisma.subject.findFirst({
     where: { name: { equals: subjectName, mode: "insensitive" } },

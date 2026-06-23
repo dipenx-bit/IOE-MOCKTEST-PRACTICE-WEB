@@ -1,14 +1,15 @@
 // app/api/questions/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth";
 import { questionSchema } from "@/lib/validations";
 
 // GET /api/questions/[id]
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
 
@@ -40,9 +41,10 @@ export async function GET(
 
 // PUT /api/questions/[id] — update question (admin only)
 export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
     if (session.user.role !== "ADMIN") {
@@ -94,9 +96,10 @@ export async function PUT(
 
 // DELETE /api/questions/[id] — delete question (admin only)
 export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { id: string } }
+  _req: Request,
+  ctx: any
 ) {
+  const { params } = ctx as any;
   try {
     const session = await requireAuth();
     if (session.user.role !== "ADMIN") {
