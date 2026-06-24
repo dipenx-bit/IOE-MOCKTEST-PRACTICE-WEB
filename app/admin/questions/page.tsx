@@ -36,7 +36,7 @@ import { cn, truncate } from "@/lib/utils";
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Subject {
   id: string; name: string;
-  chapters: { id: string; name: string }[];
+  chapters: { id: string; name: string; unitId?: string | null }[];
   units?: { id: string; name: string; chapters?: { id: string; name: string }[] }[];
 }
 interface Question {
@@ -92,7 +92,17 @@ function QuestionFormDialog({
 
   const selectedSubjectId = watch("subjectId");
   const selectedSubject   = subjects.find((s) => s.id === selectedSubjectId);
-  const chapters          = selectedSubject?.chapters ?? [];
+  const unitsInDialog     = selectedSubject?.units ?? [];
+  const [formUnit, setFormUnit] = useState<string>("all");
+
+  const chapterOptionsDialog = ((): { id: string; name: string }[] => {
+    if (!selectedSubject) return [];
+    if (formUnit !== "all") {
+      const u = unitsInDialog.find((x) => x.id === formUnit);
+      return u?.chapters ?? [];
+    }
+    return (selectedSubject.chapters ?? []).filter((c) => !c.unitId);
+  })();
 
   useEffect(() => {
     // When dialog opens for adding (not editing), ensure the form is reset
@@ -142,13 +152,13 @@ function QuestionFormDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
-          {/* Subject + Chapter row */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Subject + Unit + Chapter row */}
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label>Subject <span className="text-red-500">*</span></Label>
               <Select
                 value={watch("subjectId") ?? ""}
-                onValueChange={(v) => { setValue("subjectId", v); setValue("chapterId", ""); }}
+                onValueChange={(v) => { setValue("subjectId", v); setValue("chapterId", ""); setFormUnit("all"); }}
               >
                 <SelectTrigger className={errors.subjectId ? "border-red-400" : ""}>
                   <SelectValue placeholder="Select subject" />
@@ -163,17 +173,30 @@ function QuestionFormDialog({
             </div>
 
             <div className="space-y-1.5">
+              <Label>Unit</Label>
+              <Select value={formUnit} onValueChange={(v) => { setFormUnit(v); setValue("chapterId", ""); }} disabled={unitsInDialog.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={unitsInDialog.length === 0 ? "No units" : "Select unit (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All / Uncategorized</SelectItem>
+                  {unitsInDialog.map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label>Chapter <span className="text-red-500">*</span></Label>
               <Select
                 value={watch("chapterId") ?? ""}
                 onValueChange={(v) => setValue("chapterId", v)}
-                disabled={chapters.length === 0}
+                disabled={chapterOptionsDialog.length === 0}
               >
                 <SelectTrigger className={errors.chapterId ? "border-red-400" : ""}>
-                  <SelectValue placeholder={chapters.length === 0 ? "Select subject first" : "Select chapter"} />
+                  <SelectValue placeholder={chapterOptionsDialog.length === 0 ? "Select subject/unit first" : "Select chapter"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {chapters.map((c) => (
+                  {chapterOptionsDialog.map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -454,6 +477,7 @@ export default function AdminQuestionsPage() {
   // Filters
   const [search,     setSearch]     = useState("");
   const [subjectId,  setSubjectId]  = useState("all");
+  const [unitId,     setUnitId]     = useState("all");
   const [chapterId,  setChapterId]  = useState("all");
   const [difficulty, setDifficulty] = useState("all");
   const [page,       setPage]       = useState(1);
@@ -475,7 +499,16 @@ export default function AdminQuestionsPage() {
   });
   const subjects        = subjectsData?.data ?? [];
   const selectedSubject = subjects.find((s) => s.id === subjectId);
-  const chapters        = selectedSubject?.chapters ?? [];
+  const units           = selectedSubject?.units ?? [];
+  // Chapters shown in the chapter select depend on unit selection: if unit selected show unit's chapters, else show uncategorized chapters
+  const chapterOptions  = ((): { id: string; name: string }[] => {
+    if (!selectedSubject) return [];
+    if (unitId !== "all") {
+      const unit = units.find((u) => u.id === unitId);
+      return unit?.chapters ?? [];
+    }
+    return (selectedSubject.chapters ?? []).filter((c) => !c.unitId);
+  })();
 
   // Fetch questions
   const params = new URLSearchParams();
@@ -543,6 +576,13 @@ export default function AdminQuestionsPage() {
 
   function handleSubjectChange(val: string) {
     setSubjectId(val);
+    setUnitId("all");
+    setChapterId("all");
+    setPage(1);
+  }
+
+  function handleUnitChange(val: string) {
+    setUnitId(val);
     setChapterId("all");
     setPage(1);
   }
@@ -595,7 +635,7 @@ export default function AdminQuestionsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {(s.units ?? []).map((u) => (
+                    {(s.units ?? []).map((u) => (
                     <div key={u.id} className="border-l-2 border-blue-200 pl-3">
                       <div className="flex items-center justify-between mb-2">
                         <p className="font-medium text-sm text-gray-800">{u.name}</p>
@@ -620,6 +660,27 @@ export default function AdminQuestionsPage() {
                       </div>
                     </div>
                   ))}
+                  {/* Uncategorized chapters for this subject (chapters without unit) */}
+                  {((s.chapters ?? []).filter((c) => !c.unitId)).length > 0 && (
+                    <div className="pt-2">
+                      <p className="text-sm font-medium text-gray-700 mb-1">Uncategorized Chapters</p>
+                      <div className="space-y-1">
+                        {(s.chapters ?? []).filter((c) => !c.unitId).map((c) => (
+                          <div key={c.id} className="flex items-center justify-between p-1.5 bg-gray-50 rounded hover:bg-gray-100 transition-colors">
+                            <span className="text-xs text-gray-700">{c.name}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleAddForChapter(s.id, c.id)}
+                              className="h-6 px-2 text-blue-600 hover:text-blue-800"
+                            >
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -651,6 +712,17 @@ export default function AdminQuestionsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={unitId} onValueChange={handleUnitChange} disabled={subjectId === "all" || (units ?? []).length === 0}>
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="All Units" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Units</SelectItem>
+                {units.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select
               value={chapterId}
               onValueChange={(v) => { setChapterId(v); setPage(1); }}
@@ -661,7 +733,7 @@ export default function AdminQuestionsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Chapters</SelectItem>
-                {chapters.map((c) => (
+                {chapterOptions.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
