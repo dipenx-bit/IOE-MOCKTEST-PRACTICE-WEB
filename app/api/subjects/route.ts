@@ -7,8 +7,7 @@ import { subjectSchema } from "@/lib/validations";
 // GET /api/subjects — list all subjects (with chapters)
 export async function GET() {
   try {
-    await requireAuth();
-
+    // Public endpoint: do not require authentication for listing subjects
     const subjects = await prisma.subject.findMany({
       include: {
         units: {
