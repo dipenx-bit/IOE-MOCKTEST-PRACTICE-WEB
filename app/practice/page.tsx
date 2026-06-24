@@ -1,238 +1,790 @@
 // app/practice/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
-  CheckSquare,
+  Layers,
+  FileText,
+  BarChart2,
   Clock,
+  MinusCircle,
+  ChevronRight,
   Loader2,
   AlertCircle,
-  ChevronRight,
-  Shuffle,
-  BarChart2,
-  Hash,
+  CheckSquare,
+  Square,
 } from "lucide-react";
-
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
-
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/use-toast";
-import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Chapter {
+  id: string;
+  name: string;
+  questionCount: number;
+}
+
+interface Unit {
+  id: string;
+  name: string;
+  chapters: Chapter[];
+}
 
 interface Subject {
   id: string;
   name: string;
-  chapters: { id: string; name: string }[];
-  units?: {
-    id: string;
-    name: string;
-    chapters: { id: string; name: string }[];
-  }[];
-  _count: { questions: number };
+  units: Unit[];
+  chapters: Chapter[]; // top-level chapters not inside a unit
 }
 
-const QUESTION_COUNTS = [10, 20, 30, 50, 100];
-const DIFFICULTIES = ["EASY", "MEDIUM", "HARD", "MIXED"] as const;
+type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
 
-// ✅ FIX: no union type here anymore
-const DURATIONS = [15, 30, 60, 120];
+interface PracticeConfig {
+  subjectIds: string[];
+  unitIds: string[];
+  chapterIds: string[];
+  questionCount: number;
+  difficulty: Difficulty;
+  duration: number; // minutes
+  negativeMarking: boolean;
+  negativeMarkValue: number;
+}
 
-type Difficulty = typeof DIFFICULTIES[number];
+// ─── Fetch helper ─────────────────────────────────────────────────────────────
 
-const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  EASY: "Easy",
-  MEDIUM: "Medium",
-  HARD: "Hard",
-  MIXED: "Mixed",
-};
+async function fetchSubjects(): Promise<Subject[]> {
+  const res = await fetch("/api/subjects?includeChapters=true");
+  if (!res.ok) throw new Error("Failed to load subjects");
+  return res.json() as Promise<Subject[]>;
+}
 
-function OptionButton({
-  selected,
-  onClick,
-  children,
-}: {
+// ─── Small UI helpers ─────────────────────────────────────────────────────────
+
+interface ToggleChipProps {
+  label: string;
   selected: boolean;
   onClick: () => void;
-  children: React.ReactNode;
-}) {
+  count?: number;
+}
+
+function ToggleChip({ label, selected, onClick, count }: ToggleChipProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={cn(
-        "px-4 py-2 rounded-lg border-2 text-sm font-medium transition-all",
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
         selected
-          ? "border-blue-500 bg-blue-500 text-white"
-          : "border-gray-200 bg-white text-gray-700 hover:bg-blue-50"
-      )}
+          ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+          : "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600"
+      }`}
     >
-      {children}
+      {selected ? (
+        <CheckSquare className="w-3.5 h-3.5 flex-shrink-0" />
+      ) : (
+        <Square className="w-3.5 h-3.5 flex-shrink-0" />
+      )}
+      {label}
+      {count !== undefined && (
+        <span
+          className={`text-xs px-1.5 py-0.5 rounded-full ${
+            selected ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          {count}
+        </span>
+      )}
     </button>
   );
 }
 
+interface SectionCardProps {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}
+
+function SectionCard({ icon, title, children }: SectionCardProps) {
+  return (
+    <Card className="border border-gray-200 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base font-semibold text-gray-800">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+// ─── Difficulty options ───────────────────────────────────────────────────────
+
+const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] =
+  [
+    { value: "EASY", label: "Easy", color: "bg-green-100 text-green-700 border-green-300" },
+    { value: "MEDIUM", label: "Medium", color: "bg-yellow-100 text-yellow-700 border-yellow-300" },
+    { value: "HARD", label: "Hard", color: "bg-red-100 text-red-700 border-red-300" },
+    { value: "MIXED", label: "Mixed", color: "bg-purple-100 text-purple-700 border-purple-300" },
+  ];
+
+const DURATION_PRESETS: { label: string; value: number }[] = [
+  { label: "15 min", value: 15 },
+  { label: "30 min", value: 30 },
+  { label: "45 min", value: 45 },
+  { label: "60 min", value: 60 },
+  { label: "90 min", value: 90 },
+  { label: "120 min", value: 120 },
+];
+
+const NEGATIVE_OPTIONS: { label: string; value: number }[] = [
+  { label: "−0.25", value: 0.25 },
+  { label: "−0.5", value: 0.5 },
+  { label: "−1", value: 1 },
+];
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
 export default function PracticePage() {
   const router = useRouter();
 
-  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
-  const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
-  const [questionCount, setQuestionCount] = useState<number>(20);
-  const [difficulty, setDifficulty] = useState<Difficulty>("MIXED");
+  // ── Config state ────────────────────────────────────────────────────────────
+  const [config, setConfig] = useState<PracticeConfig>({
+    subjectIds: [],
+    unitIds: [],
+    chapterIds: [],
+    questionCount: 20,
+    difficulty: "MIXED",
+    duration: 30,
+    negativeMarking: false,
+    negativeMarkValue: 0.25,
+  });
 
-  // ✅ FIXED: plain number (no union type)
-  const [duration, setDuration] = useState<number>(30);
+  const [isStarting, setIsStarting] = useState(false);
 
-  const [negativeMarking, setNegativeMarking] = useState<number>(0);
-  const [allowNegative, setAllowNegative] = useState<boolean>(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
+  // ── Data loading ─────────────────────────────────────────────────────────────
+  const {
+    data: subjects = [],
+    isLoading,
+    isError,
+  } = useQuery<Subject[], Error>({
+    queryKey: ["subjects", "withChapters"],
+    queryFn: fetchSubjects,
+  });
 
-  const { data: subjectsData, isLoading } = useQuery<{
-  success: boolean;
-  data: Subject[];
-}>({
-  queryKey: ["subjects"],
-  queryFn: async () => {
-    const res = await fetch("/api/subjects");
-    if (!res.ok) throw new Error("Failed to load subjects");
-    return res.json();
-  },
-});
+  // ── Derived data ─────────────────────────────────────────────────────────────
 
-const subjects: Subject[] = subjectsData?.data ?? [];
+  const selectedSubjects = useMemo(
+    () => subjects.filter((s) => config.subjectIds.includes(s.id)),
+    [subjects, config.subjectIds]
+  );
 
-  const availableUnits = subjects
-    .filter((s) => selectedSubjects.includes(s.id))
-    .flatMap((s) =>
-      (s.units ?? []).map((u) => ({ ...u, subjectName: s.name }))
-    );
+  const availableUnits = useMemo(
+    () => selectedSubjects.flatMap((s) => s.units),
+    [selectedSubjects]
+  );
 
-  const unitlessChapters = subjects
-    .filter((s) => selectedSubjects.includes(s.id))
-    .flatMap((s) =>
-      s.chapters.map((c) => ({ ...c, subjectName: s.name }))
-    );
+  const availableChapters = useMemo<Chapter[]>(() => {
+    if (selectedSubjects.length === 0) return [];
 
-  const availableChapters = unitlessChapters;
+    const fromUnits: Chapter[] =
+      config.unitIds.length > 0
+        ? availableUnits
+            .filter((u) => config.unitIds.includes(u.id))
+            .flatMap((u) => u.chapters)
+        : availableUnits.flatMap((u) => u.chapters);
 
-  useEffect(() => {
-    const validUnitIds = availableUnits.map((u) => u.id);
-    setSelectedUnits((prev) =>
-      prev.filter((id) => validUnitIds.includes(id))
-    );
-  }, [selectedSubjects]);
+    const topLevel: Chapter[] = selectedSubjects.flatMap((s) => s.chapters);
 
-  async function handleGenerate() {
-    if (selectedSubjects.length === 0) {
-      toast({
-        title: "Select a subject",
-        description: "Please select at least one subject.",
-        variant: "destructive",
-      });
-      return;
-    }
+    return [...fromUnits, ...topLevel];
+  }, [selectedSubjects, availableUnits, config.unitIds]);
 
-    setIsGenerating(true);
+  const totalAvailableQuestions = useMemo(() => {
+    const pool =
+      config.chapterIds.length > 0
+        ? availableChapters.filter((c) => config.chapterIds.includes(c.id))
+        : availableChapters;
+    return pool.reduce((sum, c) => sum + c.questionCount, 0);
+  }, [availableChapters, config.chapterIds]);
 
+  const selectedChapterNames = useMemo(() => {
+    if (config.chapterIds.length === 0) return [];
+    return availableChapters
+      .filter((c) => config.chapterIds.includes(c.id))
+      .map((c) => c.name);
+  }, [availableChapters, config.chapterIds]);
+
+  // ── Toggle helpers ────────────────────────────────────────────────────────────
+
+  function toggleId(
+    key: "subjectIds" | "unitIds" | "chapterIds",
+    id: string
+  ) {
+    setConfig((prev) => {
+      const current = prev[key];
+      const next = current.includes(id)
+        ? current.filter((x) => x !== id)
+        : [...current, id];
+
+      // Cascading resets
+      if (key === "subjectIds") {
+        return { ...prev, subjectIds: next, unitIds: [], chapterIds: [] };
+      }
+      if (key === "unitIds") {
+        return { ...prev, unitIds: next, chapterIds: [] };
+      }
+      return { ...prev, [key]: next };
+    });
+  }
+
+  function selectAllSubjects() {
+    setConfig((prev) => ({
+      ...prev,
+      subjectIds: subjects.map((s) => s.id),
+      unitIds: [],
+      chapterIds: [],
+    }));
+  }
+
+  function clearSubjects() {
+    setConfig((prev) => ({
+      ...prev,
+      subjectIds: [],
+      unitIds: [],
+      chapterIds: [],
+    }));
+  }
+
+  function selectAllChapters() {
+    setConfig((prev) => ({
+      ...prev,
+      chapterIds: availableChapters.map((c) => c.id),
+    }));
+  }
+
+  function clearChapters() {
+    setConfig((prev) => ({ ...prev, chapterIds: [] }));
+  }
+
+  // ── Validation ────────────────────────────────────────────────────────────────
+
+  const isValid =
+    config.subjectIds.length > 0 && config.questionCount > 0 && config.duration > 0;
+
+  // ── Start practice ────────────────────────────────────────────────────────────
+
+  async function handleStart() {
+    if (!isValid) return;
+    setIsStarting(true);
     try {
-      const res = await fetch("/api/tests/generate", {
+      const res = await fetch("/api/practice/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subjectIds: selectedSubjects,
-          chapterIds: selectedChapters,
-          questionCount,
-          difficulty,
-          durationMinutes: duration,
-          negativeMarking: allowNegative ? negativeMarking : 0,
-        }),
+        body: JSON.stringify(config),
       });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        toast({
-          title: "Generation failed",
-          description: json.error,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      router.push(`/exam/${json.data.testId}`);
+      if (!res.ok) throw new Error("Failed to generate practice set");
+      const { testId } = (await res.json()) as { testId: string };
+      router.push(`/practice/${testId}`);
     } catch {
-      toast({
-        title: "Error",
-        description: "Something went wrong.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGenerating(false);
+      setIsStarting(false);
     }
   }
 
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
   return (
-    <div className="space-y-6 max-w-3xl">
-
-      {/* Duration */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Time Limit
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          <div className="flex gap-3 flex-wrap">
-
-            {/* preset buttons */}
-            {DURATIONS.map((d) => (
-              <OptionButton
-                key={d}
-                selected={duration === d}
-                onClick={() => setDuration(d)}
-              >
-                {d} min
-              </OptionButton>
-            ))}
-
-            {/* custom input */}
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-24 px-3 py-2 border rounded-lg"
-            />
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                Practice Set Generator
+              </h1>
+              <p className="text-sm text-gray-500">
+                Customise your session — subjects, difficulty, and duration
+              </p>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      {/* Generate */}
-      <Button onClick={handleGenerate} disabled={isGenerating}>
-        {isGenerating ? (
+      <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+        {/* Loading / Error */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16 text-gray-500">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            Loading subjects…
+          </div>
+        )}
+
+        {isError && (
+          <Alert variant="destructive">
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              Could not load subjects. Please refresh the page.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!isLoading && !isError && (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Generating...
-          </>
-        ) : (
-          <>
-            Start Practice
-            <ChevronRight className="h-4 w-4" />
+            {/* ── 1. Select Subjects ────────────────────────────────────────── */}
+            <SectionCard
+              icon={<BookOpen className="w-4 h-4 text-blue-600" />}
+              title="Select Subjects"
+            >
+              {subjects.length === 0 ? (
+                <p className="text-sm text-gray-400">No subjects found.</p>
+              ) : (
+                <>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={selectAllSubjects}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Select all
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearSubjects}
+                      className="text-xs text-gray-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {subjects.map((subject) => (
+                      <ToggleChip
+                        key={subject.id}
+                        label={subject.name}
+                        selected={config.subjectIds.includes(subject.id)}
+                        onClick={() => toggleId("subjectIds", subject.id)}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </SectionCard>
+
+            {/* ── 2. Select Units (conditional) ─────────────────────────────── */}
+            {availableUnits.length > 0 && (
+              <SectionCard
+                icon={<Layers className="w-4 h-4 text-indigo-600" />}
+                title="Select Units"
+              >
+                <p className="text-xs text-gray-500 mb-3">
+                  Leave all unselected to include every unit.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {availableUnits.map((unit) => (
+                    <ToggleChip
+                      key={unit.id}
+                      label={unit.name}
+                      selected={config.unitIds.includes(unit.id)}
+                      onClick={() => toggleId("unitIds", unit.id)}
+                      count={unit.chapters.length}
+                    />
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* ── 3. Select Chapters ────────────────────────────────────────── */}
+            <SectionCard
+              icon={<FileText className="w-4 h-4 text-teal-600" />}
+              title="Select Chapters"
+            >
+              {config.subjectIds.length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  Select at least one subject first.
+                </p>
+              ) : availableChapters.length === 0 ? (
+                <p className="text-sm text-gray-400">
+                  No chapters found for the selected subjects.
+                </p>
+              ) : (
+                <>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      type="button"
+                      onClick={selectAllChapters}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      Select all
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      type="button"
+                      onClick={clearChapters}
+                      className="text-xs text-gray-500 hover:underline"
+                    >
+                      Clear
+                    </button>
+                    <span className="ml-auto text-xs text-gray-400">
+                      {config.chapterIds.length > 0
+                        ? `${config.chapterIds.length} selected`
+                        : "All chapters included"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {availableChapters.map((chapter) => (
+                      <ToggleChip
+                        key={chapter.id}
+                        label={chapter.name}
+                        selected={config.chapterIds.includes(chapter.id)}
+                        onClick={() => toggleId("chapterIds", chapter.id)}
+                        count={chapter.questionCount}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </SectionCard>
+
+            {/* ── 4. Number of Questions ────────────────────────────────────── */}
+            <SectionCard
+              icon={<FileText className="w-4 h-4 text-orange-500" />}
+              title="Number of Questions"
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Questions</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    {config.questionCount}
+                  </span>
+                </div>
+                <Slider
+                  min={5}
+                  max={100}
+                  step={5}
+                  value={[config.questionCount]}
+                  onValueChange={([val]: number[]) =>
+                    setConfig((prev) => ({ ...prev, questionCount: val ?? prev.questionCount }))
+                  }
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>5</span>
+                  <span>50</span>
+                  <span>100</span>
+                </div>
+                {totalAvailableQuestions > 0 && (
+                  <p className="text-xs text-gray-500">
+                    {totalAvailableQuestions} questions available in selected
+                    chapters
+                    {config.questionCount > totalAvailableQuestions && (
+                      <span className="text-amber-600 ml-1">
+                        — count exceeds available questions
+                      </span>
+                    )}
+                  </p>
+                )}
+                {/* Quick picks */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {[10, 20, 30, 40, 50].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() =>
+                        setConfig((prev) => ({ ...prev, questionCount: n }))
+                      }
+                      className={`px-3 py-1 rounded-md text-sm border transition-colors ${
+                        config.questionCount === n
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-blue-400"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* ── 5. Difficulty ─────────────────────────────────────────────── */}
+            <SectionCard
+              icon={<BarChart2 className="w-4 h-4 text-rose-500" />}
+              title="Difficulty Level"
+            >
+              <div className="flex flex-wrap gap-2">
+                {DIFFICULTY_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() =>
+                      setConfig((prev) => ({ ...prev, difficulty: opt.value }))
+                    }
+                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      config.difficulty === opt.value
+                        ? opt.color + " shadow-sm"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-gray-400">
+                {config.difficulty === "MIXED"
+                  ? "Questions from all difficulty levels"
+                  : `Only ${config.difficulty.toLowerCase()} questions will be included`}
+              </p>
+            </SectionCard>
+
+            {/* ── 6. Time Limit ─────────────────────────────────────────────── */}
+            <SectionCard
+              icon={<Clock className="w-4 h-4 text-sky-600" />}
+              title="Time Limit"
+            >
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() =>
+                      setConfig((prev) => ({ ...prev, duration: preset.value }))
+                    }
+                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      config.duration === preset.value
+                        ? "bg-sky-600 text-white border-sky-600 shadow-sm"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-sky-400"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-gray-400">
+                Estimated pace:{" "}
+                <span className="font-medium text-gray-600">
+                  {(config.duration / config.questionCount).toFixed(1)} min/
+                  question
+                </span>
+              </p>
+            </SectionCard>
+
+            {/* ── 7. Negative Marking ───────────────────────────────────────── */}
+            <SectionCard
+              icon={<MinusCircle className="w-4 h-4 text-red-500" />}
+              title="Negative Marking"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    Enable negative marking
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Marks deducted for wrong answers
+                  </p>
+                </div>
+                <Switch
+                  id="negative-marking"
+                  checked={config.negativeMarking}
+                  onCheckedChange={(checked: boolean) =>
+                    setConfig((prev) => ({ ...prev, negativeMarking: checked }))
+                  }
+                />
+              </div>
+
+              {config.negativeMarking && (
+                <div>
+                  <Label className="text-sm text-gray-600 mb-2 block">
+                    Deduction per wrong answer
+                  </Label>
+                  <div className="flex gap-2">
+                    {NEGATIVE_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() =>
+                          setConfig((prev) => ({
+                            ...prev,
+                            negativeMarkValue: opt.value,
+                          }))
+                        }
+                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          config.negativeMarkValue === opt.value
+                            ? "bg-red-500 text-white border-red-500 shadow-sm"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-red-400"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </SectionCard>
+
+            {/* ── 8. Summary ────────────────────────────────────────────────── */}
+            <Card className="border-2 border-blue-100 bg-blue-50 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-blue-800">
+                  Practice Set Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  <SummaryItem
+                    label="Subjects"
+                    value={
+                      config.subjectIds.length > 0
+                        ? selectedSubjects.map((s) => s.name).join(", ")
+                        : "None selected"
+                    }
+                    warn={config.subjectIds.length === 0}
+                  />
+                  {availableUnits.length > 0 && (
+                    <SummaryItem
+                      label="Units"
+                      value={
+                        config.unitIds.length === 0
+                          ? "All units"
+                          : `${config.unitIds.length} selected`
+                      }
+                    />
+                  )}
+                  <SummaryItem
+                    label="Chapters"
+                    value={
+                      config.chapterIds.length === 0
+                        ? "All chapters"
+                        : selectedChapterNames.slice(0, 3).join(", ") +
+                          (selectedChapterNames.length > 3
+                            ? ` +${selectedChapterNames.length - 3} more`
+                            : "")
+                    }
+                  />
+                  <SummaryItem
+                    label="Questions"
+                    value={String(config.questionCount)}
+                  />
+                  <SummaryItem
+                    label="Difficulty"
+                    value={
+                      DIFFICULTY_OPTIONS.find(
+                        (d) => d.value === config.difficulty
+                      )?.label ?? config.difficulty
+                    }
+                  />
+                  <SummaryItem
+                    label="Duration"
+                    value={`${config.duration} minutes`}
+                  />
+                  <SummaryItem
+                    label="Negative Marking"
+                    value={
+                      config.negativeMarking
+                        ? `−${config.negativeMarkValue} per wrong`
+                        : "Disabled"
+                    }
+                  />
+                </div>
+
+                {config.subjectIds.length === 0 && (
+                  <div className="mt-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    Select at least one subject to start.
+                  </div>
+                )}
+
+                {/* Tags */}
+                {config.subjectIds.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {selectedSubjects.map((s) => (
+                      <Badge
+                        key={s.id}
+                        variant="secondary"
+                        className="bg-blue-100 text-blue-700 text-xs"
+                      >
+                        {s.name}
+                      </Badge>
+                    ))}
+                    <Badge variant="outline" className="text-xs">
+                      {config.questionCount} Qs
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {config.duration} min
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">
+                      {config.difficulty}
+                    </Badge>
+                    {config.negativeMarking && (
+                      <Badge
+                        variant="outline"
+                        className="text-xs text-red-600 border-red-200"
+                      >
+                        −{config.negativeMarkValue} neg
+                      </Badge>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ── Start Button ──────────────────────────────────────────────── */}
+            <Button
+              size="lg"
+              disabled={!isValid || isStarting}
+              onClick={handleStart}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold py-6 rounded-xl shadow-md transition-all"
+            >
+              {isStarting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Generating practice set…
+                </>
+              ) : (
+                <>
+                  Start Practice
+                  <ChevronRight className="w-5 h-5 ml-1" />
+                </>
+              )}
+            </Button>
           </>
         )}
-      </Button>
+      </div>
+    </div>
+  );
+}
 
+// ─── Summary item sub-component ───────────────────────────────────────────────
+
+interface SummaryItemProps {
+  label: string;
+  value: string;
+  warn?: boolean;
+}
+
+function SummaryItem({ label, value, warn = false }: SummaryItemProps) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-blue-600 font-medium uppercase tracking-wide">
+        {label}
+      </span>
+      <span
+        className={`text-sm font-semibold truncate ${
+          warn ? "text-amber-600" : "text-gray-800"
+        }`}
+        title={value}
+      >
+        {value}
+      </span>
     </div>
   );
 }

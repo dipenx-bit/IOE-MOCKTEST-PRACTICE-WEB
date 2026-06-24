@@ -4,8 +4,12 @@ import { redirect } from "next/navigation";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session?.user) redirect("/login");
-  if (session.user.role !== "STUDENT") redirect("/admin/dashboard");
+  // Allow bypassing auth for local testing by setting DEV_BYPASS_AUTH=true
+  const bypass = process.env.DEV_BYPASS_AUTH === "true";
+  if (!bypass) {
+    if (!session?.user) redirect("/login");
+    if (session.user.role !== "STUDENT") redirect("/admin/dashboard");
+  }
   return (
     <div className="flex min-h-screen bg-gray-50">
       <StudentSidebar />
