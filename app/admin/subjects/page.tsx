@@ -55,6 +55,8 @@ function SubjectCard({ subject }: { subject: Subject }) {
   const qClient = useQueryClient();
   const [newChapter, setNewChapter] = useState("");
   const [adding,     setAdding]     = useState(false);
+  const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null);
+  const [unitNewChapter, setUnitNewChapter] = useState<Record<string, string>>({});
   const [newUnit, setNewUnit] = useState("");
   const [addingUnit, setAddingUnit] = useState(false);
 
@@ -206,46 +208,108 @@ function SubjectCard({ subject }: { subject: Subject }) {
                   <Button size="sm" variant="outline" onClick={() => setAddingUnit(true)}>Add Unit</Button>
                 )}
               </div>
-              {units.length === 0 ? (
+                {units.length === 0 ? (
                 <p className="text-xs text-gray-400">No units for this subject.</p>
               ) : (
                 <div className="grid gap-2">
                   {units.map((unit) => (
-                    <div key={unit.id} className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="text-gray-700 font-medium">{unit.name}</span>
-                        <Badge variant="outline" className="text-xs">{(unit.chapters?.length ?? 0)} chapters</Badge>
+                    <div key={unit.id} className="bg-white rounded-lg border border-gray-200 text-sm">
+                      <div
+                        className="flex items-center justify-between px-3 py-2 cursor-pointer"
+                        onClick={() => setExpandedUnitId(expandedUnitId === unit.id ? null : unit.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-700 font-medium">{unit.name}</span>
+                          <Badge variant="outline" className="text-xs">{(unit.chapters?.length ?? 0)} chapters</Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                            onClick={(e) => { e.stopPropagation(); setExpandedUnitId(unit.id); }}
+                            aria-label={`Open unit ${unit.name}`}
+                          >
+                            {expandedUnitId === unit.id ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                            onClick={(e) => { e.stopPropagation(); if (!confirm(`Delete unit "${unit.name}"? Chapters will be reassigned to 'Uncategorized'. Proceed?`)) return; deleteUnit.mutate(unit.id); }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
-                          onClick={() => {
-                            const name = prompt(`Add chapter name to unit "${unit.name}"`);
-                            if (!name) return;
-                            // create chapter with unitId
-                            fetch('/api/chapters', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ subjectId: subject.id, unitId: unit.id, name: name.trim() })
-                            }).then(async (res) => {
-                              if (!res.ok) {
-                                const json = await res.json(); throw new Error(json.error || 'Failed');
-                              }
-                              toast({ title: 'Chapter added', variant: 'success' });
-                              qClient.invalidateQueries({ queryKey: ['subjects'] });
-                              qClient.invalidateQueries({ queryKey: ['units', subject.id] });
-                            }).catch((e) => toast({ title: e.message, variant: 'destructive' }));
-                          }}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
-                          onClick={() => {
-                            if (!confirm(`Delete unit "${unit.name}"? Chapters will be reassigned to 'Uncategorized'. Proceed?`)) return;
-                            deleteUnit.mutate(unit.id);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+
+                      {/* Unit chapters - visible when unit expanded */}
+                      {expandedUnitId === unit.id && (
+                        <div className="border-t p-3 space-y-2 bg-gray-50">
+                          {unit.chapters && unit.chapters.length > 0 ? (
+                            <div className="grid gap-2">
+                              {unit.chapters.map((ch) => (
+                                <div key={ch.id} className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm">
+                                  <span className="text-gray-700 font-medium truncate">{ch.name}</span>
+                                  <Badge variant="outline" className="text-xs ml-2 shrink-0">{ch._count?.questions ?? 0} Qs</Badge>
+                                  <div className="ml-2">
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                                      onClick={() => {
+                                        if (!confirm(`Delete chapter "${ch.name}"? Questions (if any) will be moved to 'Uncategorized'. Proceed?`)) return;
+                                        deleteChapter.mutate(ch.id);
+                                      }}
+                                    >
+                                      {deleteChapter.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-400">No chapters for this unit.</p>
+                          )}
+
+                          {/* Inline add chapter for this unit */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Input
+                              placeholder="Chapter name…"
+                              value={unitNewChapter[unit.id] ?? ""}
+                              onChange={(e) => setUnitNewChapter((s) => ({ ...s, [unit.id]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && (unitNewChapter[unit.id] ?? '').trim()) {
+                                  const name = (unitNewChapter[unit.id] ?? '').trim();
+                                  fetch('/api/chapters', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ subjectId: subject.id, unitId: unit.id, name })
+                                  }).then(async (res) => {
+                                    if (!res.ok) { const json = await res.json(); throw new Error(json.error || 'Failed'); }
+                                    toast({ title: 'Chapter added', variant: 'success' });
+                                    qClient.invalidateQueries({ queryKey: ['subjects'] });
+                                    qClient.invalidateQueries({ queryKey: ['units', subject.id] });
+                                    setUnitNewChapter((s) => ({ ...s, [unit.id]: '' }));
+                                  }).catch((e) => toast({ title: e.message, variant: 'destructive' }));
+                                }
+                                if (e.key === 'Escape') setUnitNewChapter((s) => ({ ...s, [unit.id]: '' }));
+                              }}
+                              autoFocus
+                              className="flex-1 h-8 text-sm"
+                            />
+                            <Button size="sm" className="h-8"
+                              onClick={() => {
+                                const name = (unitNewChapter[unit.id] ?? '').trim();
+                                if (!name) return;
+                                fetch('/api/chapters', {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ subjectId: subject.id, unitId: unit.id, name })
+                                }).then(async (res) => {
+                                  if (!res.ok) { const json = await res.json(); throw new Error(json.error || 'Failed'); }
+                                  toast({ title: 'Chapter added', variant: 'success' });
+                                  qClient.invalidateQueries({ queryKey: ['subjects'] });
+                                  qClient.invalidateQueries({ queryKey: ['units', subject.id] });
+                                  setUnitNewChapter((s) => ({ ...s, [unit.id]: '' }));
+                                }).catch((e) => toast({ title: e.message, variant: 'destructive' }));
+                              }}
+                            >
+                              Add
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-8" onClick={() => setUnitNewChapter((s) => ({ ...s, [unit.id]: '' }))}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
