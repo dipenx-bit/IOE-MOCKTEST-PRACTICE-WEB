@@ -20,17 +20,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Chapter {
   id: string;
   name: string;
-  questionCount: number;
 }
 
 interface Unit {
@@ -42,8 +39,9 @@ interface Unit {
 interface Subject {
   id: string;
   name: string;
-  units: Unit[];
-  chapters: Chapter[]; // top-level chapters not inside a unit
+  chapters: Chapter[];
+  units?: Unit[];
+  _count: { questions: number };
 }
 
 type Difficulty = "EASY" | "MEDIUM" | "HARD" | "MIXED";
@@ -54,20 +52,12 @@ interface PracticeConfig {
   chapterIds: string[];
   questionCount: number;
   difficulty: Difficulty;
-  duration: number; // minutes
+  duration: number;
   negativeMarking: boolean;
   negativeMarkValue: number;
 }
 
-// ─── Fetch helper ─────────────────────────────────────────────────────────────
-
-async function fetchSubjects(): Promise<Subject[]> {
-  const res = await fetch("/api/subjects?includeChapters=true");
-  if (!res.ok) throw new Error("Failed to load subjects");
-  return res.json() as Promise<Subject[]>;
-}
-
-// ─── Small UI helpers ─────────────────────────────────────────────────────────
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface ToggleChipProps {
   label: string;
@@ -81,11 +71,12 @@ function ToggleChip({ label, selected, onClick, count }: ToggleChipProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+      className={cn(
+        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
         selected
           ? "bg-blue-600 text-white border-blue-600 shadow-sm"
           : "bg-white text-gray-700 border-gray-200 hover:border-blue-400 hover:text-blue-600"
-      }`}
+      )}
     >
       {selected ? (
         <CheckSquare className="w-3.5 h-3.5 flex-shrink-0" />
@@ -95,9 +86,10 @@ function ToggleChip({ label, selected, onClick, count }: ToggleChipProps) {
       {label}
       {count !== undefined && (
         <span
-          className={`text-xs px-1.5 py-0.5 rounded-full ${
+          className={cn(
+            "text-xs px-1.5 py-0.5 rounded-full",
             selected ? "bg-blue-500 text-white" : "bg-gray-100 text-gray-500"
-          }`}
+          )}
         >
           {count}
         </span>
@@ -126,15 +118,59 @@ function SectionCard({ icon, title, children }: SectionCardProps) {
   );
 }
 
-// ─── Difficulty options ───────────────────────────────────────────────────────
+interface SummaryItemProps {
+  label: string;
+  value: string;
+  warn?: boolean;
+}
 
-const DIFFICULTY_OPTIONS: { value: Difficulty; label: string; color: string }[] =
-  [
-    { value: "EASY", label: "Easy", color: "bg-green-100 text-green-700 border-green-300" },
-    { value: "MEDIUM", label: "Medium", color: "bg-yellow-100 text-yellow-700 border-yellow-300" },
-    { value: "HARD", label: "Hard", color: "bg-red-100 text-red-700 border-red-300" },
-    { value: "MIXED", label: "Mixed", color: "bg-purple-100 text-purple-700 border-purple-300" },
-  ];
+function SummaryItem({ label, value, warn = false }: SummaryItemProps) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-blue-600 font-medium uppercase tracking-wide">
+        {label}
+      </span>
+      <span
+        className={cn(
+          "text-sm font-semibold truncate",
+          warn ? "text-amber-600" : "text-gray-800"
+        )}
+        title={value}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DIFFICULTY_OPTIONS: {
+  value: Difficulty;
+  label: string;
+  activeClass: string;
+}[] = [
+  {
+    value: "EASY",
+    label: "Easy",
+    activeClass: "bg-green-100 text-green-700 border-green-300",
+  },
+  {
+    value: "MEDIUM",
+    label: "Medium",
+    activeClass: "bg-yellow-100 text-yellow-700 border-yellow-300",
+  },
+  {
+    value: "HARD",
+    label: "Hard",
+    activeClass: "bg-red-100 text-red-700 border-red-300",
+  },
+  {
+    value: "MIXED",
+    label: "Mixed",
+    activeClass: "bg-purple-100 text-purple-700 border-purple-300",
+  },
+];
 
 const DURATION_PRESETS: { label: string; value: number }[] = [
   { label: "15 min", value: 15 },
@@ -151,12 +187,13 @@ const NEGATIVE_OPTIONS: { label: string; value: number }[] = [
   { label: "−1", value: 1 },
 ];
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+const QUESTION_PRESETS = [10, 20, 30, 40, 50] as const;
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PracticePage() {
   const router = useRouter();
 
-  // ── Config state ────────────────────────────────────────────────────────────
   const [config, setConfig] = useState<PracticeConfig>({
     subjectIds: [],
     unitIds: [],
@@ -168,27 +205,34 @@ export default function PracticePage() {
     negativeMarkValue: 0.25,
   });
 
-  const [isStarting, setIsStarting] = useState(false);
+  const [isStarting, setIsStarting] = useState<boolean>(false);
+  const [startError, setStartError] = useState<string>("");
 
-  // ── Data loading ─────────────────────────────────────────────────────────────
+  // ── Data loading ───────────────────────────────────────────────────────────
+
   const {
-    data: subjects = [],
+    data: subjectsData,
     isLoading,
     isError,
-  } = useQuery<Subject[], Error>({
-    queryKey: ["subjects", "withChapters"],
-    queryFn: fetchSubjects,
+  } = useQuery<{ success: boolean; data: Subject[] }>({
+    queryKey: ["subjects"],
+    queryFn: async () => {
+      const res = await fetch("/api/subjects");
+      return res.json() as Promise<{ success: boolean; data: Subject[] }>;
+    },
   });
 
-  // ── Derived data ─────────────────────────────────────────────────────────────
+  const subjects: Subject[] = subjectsData?.data ?? [];
+
+  // ── Derived data ───────────────────────────────────────────────────────────
 
   const selectedSubjects = useMemo(
-    () => subjects.filter((s) => config.subjectIds.includes(s.id)),
+    () => subjects.filter((s: Subject) => config.subjectIds.includes(s.id)),
     [subjects, config.subjectIds]
   );
 
-  const availableUnits = useMemo(
-    () => selectedSubjects.flatMap((s) => s.units),
+  const availableUnits = useMemo<Unit[]>(
+    () => selectedSubjects.flatMap((s: Subject) => s.units ?? []),
     [selectedSubjects]
   );
 
@@ -198,64 +242,55 @@ export default function PracticePage() {
     const fromUnits: Chapter[] =
       config.unitIds.length > 0
         ? availableUnits
-            .filter((u) => config.unitIds.includes(u.id))
-            .flatMap((u) => u.chapters)
-        : availableUnits.flatMap((u) => u.chapters);
+            .filter((u: Unit) => config.unitIds.includes(u.id))
+            .flatMap((u: Unit) => u.chapters)
+        : availableUnits.flatMap((u: Unit) => u.chapters);
 
-    const topLevel: Chapter[] = selectedSubjects.flatMap((s) => s.chapters);
+    const topLevel: Chapter[] = selectedSubjects.flatMap(
+      (s: Subject) => s.chapters
+    );
 
-    return [...fromUnits, ...topLevel];
+    const seen = new Set<string>();
+    return [...fromUnits, ...topLevel].filter((c: Chapter) => {
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
   }, [selectedSubjects, availableUnits, config.unitIds]);
 
-  const totalAvailableQuestions = useMemo(() => {
-    const pool =
-      config.chapterIds.length > 0
-        ? availableChapters.filter((c) => config.chapterIds.includes(c.id))
-        : availableChapters;
-    return pool.reduce((sum, c) => sum + c.questionCount, 0);
-  }, [availableChapters, config.chapterIds]);
-
-  const selectedChapterNames = useMemo(() => {
-    if (config.chapterIds.length === 0) return [];
-    return availableChapters
-      .filter((c) => config.chapterIds.includes(c.id))
-      .map((c) => c.name);
-  }, [availableChapters, config.chapterIds]);
-
-  // ── Toggle helpers ────────────────────────────────────────────────────────────
+  // ── Toggle helpers ─────────────────────────────────────────────────────────
 
   function toggleId(
     key: "subjectIds" | "unitIds" | "chapterIds",
     id: string
-  ) {
-    setConfig((prev) => {
+  ): void {
+    setConfig((prev: PracticeConfig) => {
       const current = prev[key];
       const next = current.includes(id)
-        ? current.filter((x) => x !== id)
+        ? current.filter((x: string) => x !== id)
         : [...current, id];
 
-      // Cascading resets
       if (key === "subjectIds") {
         return { ...prev, subjectIds: next, unitIds: [], chapterIds: [] };
       }
       if (key === "unitIds") {
         return { ...prev, unitIds: next, chapterIds: [] };
       }
-      return { ...prev, [key]: next };
+      return { ...prev, chapterIds: next };
     });
   }
 
-  function selectAllSubjects() {
-    setConfig((prev) => ({
+  function selectAllSubjects(): void {
+    setConfig((prev: PracticeConfig) => ({
       ...prev,
-      subjectIds: subjects.map((s) => s.id),
+      subjectIds: subjects.map((s: Subject) => s.id),
       unitIds: [],
       chapterIds: [],
     }));
   }
 
-  function clearSubjects() {
-    setConfig((prev) => ({
+  function clearSubjects(): void {
+    setConfig((prev: PracticeConfig) => ({
       ...prev,
       subjectIds: [],
       unitIds: [],
@@ -263,27 +298,30 @@ export default function PracticePage() {
     }));
   }
 
-  function selectAllChapters() {
-    setConfig((prev) => ({
+  function selectAllChapters(): void {
+    setConfig((prev: PracticeConfig) => ({
       ...prev,
-      chapterIds: availableChapters.map((c) => c.id),
+      chapterIds: availableChapters.map((c: Chapter) => c.id),
     }));
   }
 
-  function clearChapters() {
-    setConfig((prev) => ({ ...prev, chapterIds: [] }));
+  function clearChapters(): void {
+    setConfig((prev: PracticeConfig) => ({ ...prev, chapterIds: [] }));
   }
 
-  // ── Validation ────────────────────────────────────────────────────────────────
+  // ── Validation ─────────────────────────────────────────────────────────────
 
   const isValid =
-    config.subjectIds.length > 0 && config.questionCount > 0 && config.duration > 0;
+    config.subjectIds.length > 0 &&
+    config.questionCount > 0 &&
+    config.duration > 0;
 
-  // ── Start practice ────────────────────────────────────────────────────────────
+  // ── Start practice ─────────────────────────────────────────────────────────
 
-  async function handleStart() {
+  async function handleStart(): Promise<void> {
     if (!isValid) return;
     setIsStarting(true);
+    setStartError("");
     try {
       const res = await fetch("/api/practice/generate", {
         method: "POST",
@@ -291,14 +329,17 @@ export default function PracticePage() {
         body: JSON.stringify(config),
       });
       if (!res.ok) throw new Error("Failed to generate practice set");
-      const { testId } = (await res.json()) as { testId: string };
-      router.push(`/practice/${testId}`);
-    } catch {
+      const json = (await res.json()) as { testId: string };
+      router.push(`/practice/${json.testId}`);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Something went wrong";
+      setStartError(message);
       setIsStarting(false);
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -322,26 +363,37 @@ export default function PracticePage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
-        {/* Loading / Error */}
+        {/* Loading skeletons */}
         {isLoading && (
-          <div className="flex items-center justify-center py-16 text-gray-500">
-            <Loader2 className="w-5 h-5 animate-spin mr-2" />
-            Loading subjects…
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="border border-gray-200">
+                <CardHeader className="pb-3">
+                  <Skeleton className="h-5 w-40" />
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {[1, 2, 3, 4].map((j) => (
+                      <Skeleton key={j} className="h-8 w-24 rounded-lg" />
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         )}
 
+        {/* Error state */}
         {isError && (
-          <Alert variant="destructive">
-            <AlertCircle className="w-4 h-4" />
-            <AlertDescription>
-              Could not load subjects. Please refresh the page.
-            </AlertDescription>
-          </Alert>
+          <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <p>Could not load subjects. Please refresh the page.</p>
+          </div>
         )}
 
         {!isLoading && !isError && (
           <>
-            {/* ── 1. Select Subjects ────────────────────────────────────────── */}
+            {/* ── 1. Select Subjects ──────────────────────────────────────── */}
             <SectionCard
               icon={<BookOpen className="w-4 h-4 text-blue-600" />}
               title="Select Subjects"
@@ -368,12 +420,13 @@ export default function PracticePage() {
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {subjects.map((subject) => (
+                    {subjects.map((subject: Subject) => (
                       <ToggleChip
                         key={subject.id}
                         label={subject.name}
                         selected={config.subjectIds.includes(subject.id)}
                         onClick={() => toggleId("subjectIds", subject.id)}
+                        count={subject._count.questions}
                       />
                     ))}
                   </div>
@@ -381,7 +434,7 @@ export default function PracticePage() {
               )}
             </SectionCard>
 
-            {/* ── 2. Select Units (conditional) ─────────────────────────────── */}
+            {/* ── 2. Select Units (conditional) ───────────────────────────── */}
             {availableUnits.length > 0 && (
               <SectionCard
                 icon={<Layers className="w-4 h-4 text-indigo-600" />}
@@ -391,7 +444,7 @@ export default function PracticePage() {
                   Leave all unselected to include every unit.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {availableUnits.map((unit) => (
+                  {availableUnits.map((unit: Unit) => (
                     <ToggleChip
                       key={unit.id}
                       label={unit.name}
@@ -404,7 +457,7 @@ export default function PracticePage() {
               </SectionCard>
             )}
 
-            {/* ── 3. Select Chapters ────────────────────────────────────────── */}
+            {/* ── 3. Select Chapters ──────────────────────────────────────── */}
             <SectionCard
               icon={<FileText className="w-4 h-4 text-teal-600" />}
               title="Select Chapters"
@@ -419,7 +472,7 @@ export default function PracticePage() {
                 </p>
               ) : (
                 <>
-                  <div className="flex gap-2 mb-3">
+                  <div className="flex items-center gap-2 mb-3">
                     <button
                       type="button"
                       onClick={selectAllChapters}
@@ -437,18 +490,17 @@ export default function PracticePage() {
                     </button>
                     <span className="ml-auto text-xs text-gray-400">
                       {config.chapterIds.length > 0
-                        ? `${config.chapterIds.length} selected`
+                        ? `${config.chapterIds.length} of ${availableChapters.length} selected`
                         : "All chapters included"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {availableChapters.map((chapter) => (
+                    {availableChapters.map((chapter: Chapter) => (
                       <ToggleChip
                         key={chapter.id}
                         label={chapter.name}
                         selected={config.chapterIds.includes(chapter.id)}
                         onClick={() => toggleId("chapterIds", chapter.id)}
-                        count={chapter.questionCount}
                       />
                     ))}
                   </div>
@@ -456,7 +508,7 @@ export default function PracticePage() {
               )}
             </SectionCard>
 
-            {/* ── 4. Number of Questions ────────────────────────────────────── */}
+            {/* ── 4. Number of Questions ──────────────────────────────────── */}
             <SectionCard
               icon={<FileText className="w-4 h-4 text-orange-500" />}
               title="Number of Questions"
@@ -468,55 +520,74 @@ export default function PracticePage() {
                     {config.questionCount}
                   </span>
                 </div>
-                <Slider
+
+                <input
+                  type="range"
                   min={5}
                   max={100}
                   step={5}
-                  value={[config.questionCount]}
-                  onValueChange={([val]: number[]) =>
-                    setConfig((prev) => ({ ...prev, questionCount: val ?? prev.questionCount }))
+                  value={config.questionCount}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setConfig((prev: PracticeConfig) => ({
+                      ...prev,
+                      questionCount: Number(e.target.value),
+                    }))
                   }
-                  className="w-full"
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-blue-600"
                 />
                 <div className="flex justify-between text-xs text-gray-400">
                   <span>5</span>
                   <span>50</span>
                   <span>100</span>
                 </div>
-                {totalAvailableQuestions > 0 && (
-                  <p className="text-xs text-gray-500">
-                    {totalAvailableQuestions} questions available in selected
-                    chapters
-                    {config.questionCount > totalAvailableQuestions && (
-                      <span className="text-amber-600 ml-1">
-                        — count exceeds available questions
-                      </span>
-                    )}
-                  </p>
-                )}
-                {/* Quick picks */}
+
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {[10, 20, 30, 40, 50].map((n) => (
+                  {QUESTION_PRESETS.map((n) => (
                     <button
                       key={n}
                       type="button"
                       onClick={() =>
-                        setConfig((prev) => ({ ...prev, questionCount: n }))
+                        setConfig((prev: PracticeConfig) => ({
+                          ...prev,
+                          questionCount: n,
+                        }))
                       }
-                      className={`px-3 py-1 rounded-md text-sm border transition-colors ${
+                      className={cn(
+                        "px-3 py-1 rounded-md text-sm border transition-colors",
                         config.questionCount === n
                           ? "bg-blue-600 text-white border-blue-600"
                           : "bg-white text-gray-600 border-gray-200 hover:border-blue-400"
-                      }`}
+                      )}
                     >
                       {n}
                     </button>
                   ))}
                 </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-sm text-gray-500">Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={config.questionCount}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                      const val = Math.max(
+                        1,
+                        Math.min(200, Number(e.target.value))
+                      );
+                      setConfig((prev: PracticeConfig) => ({
+                        ...prev,
+                        questionCount: val,
+                      }));
+                    }}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
             </SectionCard>
 
-            {/* ── 5. Difficulty ─────────────────────────────────────────────── */}
+            {/* ── 5. Difficulty ───────────────────────────────────────────── */}
             <SectionCard
               icon={<BarChart2 className="w-4 h-4 text-rose-500" />}
               title="Difficulty Level"
@@ -527,13 +598,17 @@ export default function PracticePage() {
                     key={opt.value}
                     type="button"
                     onClick={() =>
-                      setConfig((prev) => ({ ...prev, difficulty: opt.value }))
+                      setConfig((prev: PracticeConfig) => ({
+                        ...prev,
+                        difficulty: opt.value,
+                      }))
                     }
-                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                       config.difficulty === opt.value
-                        ? opt.color + " shadow-sm"
+                        ? opt.activeClass + " shadow-sm"
                         : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                    }`}
+                    )}
                   >
                     {opt.label}
                   </button>
@@ -546,7 +621,7 @@ export default function PracticePage() {
               </p>
             </SectionCard>
 
-            {/* ── 6. Time Limit ─────────────────────────────────────────────── */}
+            {/* ── 6. Time Limit ───────────────────────────────────────────── */}
             <SectionCard
               icon={<Clock className="w-4 h-4 text-sky-600" />}
               title="Time Limit"
@@ -557,13 +632,17 @@ export default function PracticePage() {
                     key={preset.value}
                     type="button"
                     onClick={() =>
-                      setConfig((prev) => ({ ...prev, duration: preset.value }))
+                      setConfig((prev: PracticeConfig) => ({
+                        ...prev,
+                        duration: preset.value,
+                      }))
                     }
-                    className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                       config.duration === preset.value
                         ? "bg-sky-600 text-white border-sky-600 shadow-sm"
                         : "bg-white text-gray-600 border-gray-200 hover:border-sky-400"
-                    }`}
+                    )}
                   >
                     {preset.label}
                   </button>
@@ -572,18 +651,34 @@ export default function PracticePage() {
               <p className="mt-3 text-xs text-gray-400">
                 Estimated pace:{" "}
                 <span className="font-medium text-gray-600">
-                  {(config.duration / config.questionCount).toFixed(1)} min/
-                  question
+                  {(config.duration / config.questionCount).toFixed(1)}{" "}
+                  min/question
                 </span>
               </p>
             </SectionCard>
 
-            {/* ── 7. Negative Marking ───────────────────────────────────────── */}
+            {/* ── 7. Negative Marking ─────────────────────────────────────── */}
             <SectionCard
               icon={<MinusCircle className="w-4 h-4 text-red-500" />}
               title="Negative Marking"
             >
-              <div className="flex items-center justify-between mb-4">
+              <label className="flex items-center gap-3 cursor-pointer select-none mb-4">
+                <div className="relative inline-flex items-center">
+                  <input
+                    type="checkbox"
+                    id="negative-marking"
+                    checked={config.negativeMarking}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setConfig((prev: PracticeConfig) => ({
+                        ...prev,
+                        negativeMarking: e.target.checked,
+                      }))
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors" />
+                  <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
+                </div>
                 <div>
                   <p className="text-sm font-medium text-gray-700">
                     Enable negative marking
@@ -592,36 +687,30 @@ export default function PracticePage() {
                     Marks deducted for wrong answers
                   </p>
                 </div>
-                <Switch
-                  id="negative-marking"
-                  checked={config.negativeMarking}
-                  onCheckedChange={(checked: boolean) =>
-                    setConfig((prev) => ({ ...prev, negativeMarking: checked }))
-                  }
-                />
-              </div>
+              </label>
 
               {config.negativeMarking && (
                 <div>
-                  <Label className="text-sm text-gray-600 mb-2 block">
+                  <p className="text-sm text-gray-600 mb-2 font-medium">
                     Deduction per wrong answer
-                  </Label>
+                  </p>
                   <div className="flex gap-2">
                     {NEGATIVE_OPTIONS.map((opt) => (
                       <button
                         key={opt.value}
                         type="button"
                         onClick={() =>
-                          setConfig((prev) => ({
+                          setConfig((prev: PracticeConfig) => ({
                             ...prev,
                             negativeMarkValue: opt.value,
                           }))
                         }
-                        className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                        className={cn(
+                          "px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                           config.negativeMarkValue === opt.value
                             ? "bg-red-500 text-white border-red-500 shadow-sm"
                             : "bg-white text-gray-600 border-gray-200 hover:border-red-400"
-                        }`}
+                        )}
                       >
                         {opt.label}
                       </button>
@@ -631,7 +720,7 @@ export default function PracticePage() {
               )}
             </SectionCard>
 
-            {/* ── 8. Summary ────────────────────────────────────────────────── */}
+            {/* ── 8. Summary ──────────────────────────────────────────────── */}
             <Card className="border-2 border-blue-100 bg-blue-50 shadow-sm">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-blue-800">
@@ -644,7 +733,9 @@ export default function PracticePage() {
                     label="Subjects"
                     value={
                       config.subjectIds.length > 0
-                        ? selectedSubjects.map((s) => s.name).join(", ")
+                        ? selectedSubjects
+                            .map((s: Subject) => s.name)
+                            .join(", ")
                         : "None selected"
                     }
                     warn={config.subjectIds.length === 0}
@@ -664,10 +755,7 @@ export default function PracticePage() {
                     value={
                       config.chapterIds.length === 0
                         ? "All chapters"
-                        : selectedChapterNames.slice(0, 3).join(", ") +
-                          (selectedChapterNames.length > 3
-                            ? ` +${selectedChapterNames.length - 3} more`
-                            : "")
+                        : `${config.chapterIds.length} selected`
                     }
                   />
                   <SummaryItem
@@ -699,14 +787,20 @@ export default function PracticePage() {
                 {config.subjectIds.length === 0 && (
                   <div className="mt-4 flex items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    Select at least one subject to start.
+                    <p>Select at least one subject to start.</p>
                   </div>
                 )}
 
-                {/* Tags */}
+                {startError && (
+                  <div className="mt-3 flex items-center gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <p>{startError}</p>
+                  </div>
+                )}
+
                 {config.subjectIds.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-1.5">
-                    {selectedSubjects.map((s) => (
+                    {selectedSubjects.map((s: Subject) => (
                       <Badge
                         key={s.id}
                         variant="secondary"
@@ -737,12 +831,12 @@ export default function PracticePage() {
               </CardContent>
             </Card>
 
-            {/* ── Start Button ──────────────────────────────────────────────── */}
+            {/* ── Start Button ─────────────────────────────────────────────── */}
             <Button
               size="lg"
               disabled={!isValid || isStarting}
               onClick={handleStart}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold py-6 rounded-xl shadow-md transition-all"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white text-base font-semibold py-6 rounded-xl shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isStarting ? (
                 <>
@@ -759,32 +853,6 @@ export default function PracticePage() {
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── Summary item sub-component ───────────────────────────────────────────────
-
-interface SummaryItemProps {
-  label: string;
-  value: string;
-  warn?: boolean;
-}
-
-function SummaryItem({ label, value, warn = false }: SummaryItemProps) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-blue-600 font-medium uppercase tracking-wide">
-        {label}
-      </span>
-      <span
-        className={`text-sm font-semibold truncate ${
-          warn ? "text-amber-600" : "text-gray-800"
-        }`}
-        title={value}
-      >
-        {value}
-      </span>
     </div>
   );
 }
