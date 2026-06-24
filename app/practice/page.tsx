@@ -97,16 +97,19 @@ export default function PracticePage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
 
-  const { data: subjectsData, isLoading } = useQuery({
-    queryKey: ["subjects"],
-    queryFn: async () => {
-      const res = await fetch("/api/subjects");
-      if (!res.ok) throw new Error("Failed to load subjects");
-      return res.json();
-    },
-  });
+  const { data: subjectsData, isLoading } = useQuery<{
+  success: boolean;
+  data: Subject[];
+}>({
+  queryKey: ["subjects"],
+  queryFn: async () => {
+    const res = await fetch("/api/subjects");
+    if (!res.ok) throw new Error("Failed to load subjects");
+    return res.json();
+  },
+});
 
-  const subjects = subjectsData?.data ?? [];
+const subjects: Subject[] = subjectsData?.data ?? [];
 
   const availableUnits = subjects
     .filter((s) => selectedSubjects.includes(s.id))
