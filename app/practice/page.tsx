@@ -95,19 +95,33 @@ export default function PracticePage() {
 
   const subjects = subjectsData?.data ?? [];
 
-  // ── Available chapters based on selected subjects ────────────────────────────
-  const availableChapters = subjects
+  // ── Available units and chapters based on selected subjects ───────────────
+  const availableUnits = subjects
     .filter((s) => selectedSubjects.includes(s.id))
-    .flatMap((s) => [
-      ...s.chapters.map((c) => ({ ...c, subjectName: s.name, unitName: undefined })),
-      ...(s.units ?? []).flatMap((u) => u.chapters.map((c) => ({ ...c, subjectName: s.name, unitName: u.name, unitId: u.id }))),
-    ]);
+    .flatMap((s) => (s.units ?? []).map((u) => ({ ...u, subjectName: s.name })));
 
-  // Reset chapters when subjects change
+  const unitlessChapters = subjects
+    .filter((s) => selectedSubjects.includes(s.id))
+    .flatMap((s) => s.chapters.map((c) => ({ ...c, subjectName: s.name, unitId: undefined })));
+
+  const availableChapters = selectedUnits.length > 0
+    ? subjects
+        .flatMap((s) => (s.units ?? []).map((u) => ({ ...u, subjectName: s.name })))
+        .filter((u) => selectedUnits.includes(u.id))
+        .flatMap((u) => u.chapters.map((c) => ({ ...c, subjectName: u.subjectName, unitName: u.name, unitId: u.id })))
+    : unitlessChapters;
+
+  // Reset selected units/chapters when subjects change
   useEffect(() => {
-    setSelectedChapters((prev) =>
-      prev.filter((cid) => availableChapters.some((c) => c.id === cid))
-    );
+    const validUnitIds = availableUnits.map((u) => u.id);
+    setSelectedUnits((prev) => prev.filter((id) => validUnitIds.includes(id)));
+
+    setSelectedChapters((prev) => prev.filter((cid) => {
+      return (selectedUnits.length > 0
+        ? availableChapters.some((c) => c.id === cid)
+        : unitlessChapters.some((c) => c.id === cid)
+      );
+    }));
   }, [selectedSubjects]);
 
   // ── Toggle helpers ───────────────────────────────────────────────────────────
@@ -248,7 +262,42 @@ export default function PracticePage() {
         </CardContent>
       </Card>
 
-      {/* Step 2 — Chapters */}
+      {/* Step 2 — Units */}
+      {availableUnits.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+              Select Units
+              <span className="text-xs text-gray-400 font-normal ml-2">(optional — select to limit chapters)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-3">
+              {availableUnits.map((unit) => (
+                <button
+                  key={unit.id}
+                  onClick={() => toggleUnit(unit.id, unit.chapters.map((c) => c.id))}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 text-sm font-medium transition-all",
+                    selectedUnits.includes(unit.id)
+                      ? "border-blue-500 bg-blue-500 text-white shadow-md scale-[1.02]"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50"
+                  )}
+                >
+                  {selectedUnits.includes(unit.id) && <CheckSquare className="h-4 w-4" />}
+                  <div className="flex flex-col items-start">
+                    <span className="leading-none">{unit.name}</span>
+                    <span className="text-xs text-gray-400">{unit.subjectName}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 3 — Chapters */}
       {availableChapters.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
@@ -297,7 +346,7 @@ export default function PracticePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
             {QUESTION_COUNTS.map((count) => (
               <OptionButton
                 key={count}
@@ -307,6 +356,18 @@ export default function PracticePage() {
                 {count} Questions
               </OptionButton>
             ))}
+
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={questionCount}
+                onChange={(e) => setQuestionCount(Number(e.target.value || 0))}
+                className="w-24 px-3 py-2 border rounded-lg"
+                aria-label="Custom question count"
+              />
+              <span className="text-sm text-gray-500">questions</span>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -366,7 +427,7 @@ export default function PracticePage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
             {DURATIONS.map((d) => (
               <OptionButton
                 key={d}
@@ -377,6 +438,18 @@ export default function PracticePage() {
                 {d < 60 ? `${d} min` : `${d / 60} hr`}
               </OptionButton>
             ))}
+
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value || 0))}
+                className="w-24 px-3 py-2 border rounded-lg"
+                aria-label="Custom duration in minutes"
+              />
+              <span className="text-sm text-gray-500">minutes</span>
+            </div>
           </div>
         </CardContent>
       </Card>
