@@ -13,12 +13,12 @@ export async function GET() {
       include: {
         units: {
           include: {
-            chapters: { orderBy: { name: "asc" } },
+            chapters: { orderBy: { createdAt: "asc" } },
           },
-          orderBy: { name: "asc" },
+          orderBy: { createdAt: "asc" },
         },
         chapters: {
-          orderBy: { name: "asc" },
+          orderBy: { createdAt: "asc" },
         },
         _count: { select: { questions: true } },
       },
@@ -102,6 +102,31 @@ export async function DELETE(req: NextRequest) {
   } catch (error: any) {
     if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     console.error("[SUBJECTS DELETE]", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/subjects — rename subject (admin only)
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await requireAuth();
+    if (session.user.role !== "ADMIN") return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+
+    const body = await req.json();
+    const { id, name } = body;
+    if (!id || !name || typeof name !== 'string' || !name.trim()) return NextResponse.json({ success: false, error: 'Missing id or name' }, { status: 400 });
+
+    const parsed = subjectSchema.safeParse({ name: name.trim() });
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Validation failed', fields: parsed.error.flatten().fieldErrors }, { status: 400 });
+
+    const existing = await prisma.subject.findUnique({ where: { name: parsed.data.name } });
+    if (existing && existing.id !== id) return NextResponse.json({ success: false, error: 'Subject name already in use' }, { status: 409 });
+
+    const subject = await prisma.subject.update({ where: { id }, data: { name: parsed.data.name } });
+    return NextResponse.json({ success: true, data: subject });
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    console.error("[SUBJECTS PATCH]", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

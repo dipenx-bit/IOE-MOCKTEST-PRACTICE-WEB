@@ -61,6 +61,7 @@ model Chapter {
   subjectId String
   unitId    String?
   name      String
+  createdAt DateTime @default(now())
 
   subject   Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   unit      Unit?      @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -74,6 +75,7 @@ model Unit {
   id        String   @id @default(cuid())
   subjectId String
   name      String
+  createdAt DateTime @default(now())
 
   subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   chapters  Chapter[]

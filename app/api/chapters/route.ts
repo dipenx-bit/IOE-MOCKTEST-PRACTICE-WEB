@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         subject: { select: { id: true, name: true } },
         _count:  { select: { questions: true } },
       },
-      orderBy: { name: "asc" },
+      orderBy: { createdAt: "asc" },
     });
 
     return NextResponse.json({ success: true, data: chapters });
@@ -134,6 +134,37 @@ export async function DELETE(req: NextRequest) {
   } catch (error: any) {
     if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     console.error("[CHAPTERS DELETE]", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/chapters — rename chapter (admin only)
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await requireAuth();
+    if (session.user.role !== "ADMIN") return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+
+    const body = await req.json();
+    const { id, name } = body;
+    if (!id || !name || typeof name !== 'string' || !name.trim()) return NextResponse.json({ success: false, error: 'Missing id or name' }, { status: 400 });
+
+    // fetch chapter to know subjectId
+    const chapter = await prisma.chapter.findUnique({ where: { id } });
+    if (!chapter) return NextResponse.json({ success: false, error: 'Chapter not found' }, { status: 404 });
+
+    const { chapterSchema } = await import('@/lib/validations');
+    const parsed = chapterSchema.pick({ name: true }).safeParse({ name: name.trim() });
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Validation failed', fields: parsed.error.flatten().fieldErrors }, { status: 400 });
+
+    // check duplicate within subject
+    const existing = await prisma.chapter.findUnique({ where: { subjectId_name: { subjectId: chapter.subjectId, name: parsed.data.name } } });
+    if (existing && existing.id !== id) return NextResponse.json({ success: false, error: 'Chapter name already exists in this subject' }, { status: 409 });
+
+    const updated = await prisma.chapter.update({ where: { id }, data: { name: parsed.data.name } });
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    console.error("[CHAPTERS PATCH]", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }

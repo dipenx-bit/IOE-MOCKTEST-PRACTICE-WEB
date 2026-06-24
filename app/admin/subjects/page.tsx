@@ -99,6 +99,24 @@ function SubjectCard({ subject }: { subject: Subject }) {
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
   });
 
+  const renameSubject = useMutation({
+    mutationFn: async (newName: string) => {
+      const res = await fetch('/api/subjects', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: subject.id, name: newName.trim() })
+      });
+      if (!res.ok) {
+        const json = await res.json(); throw new Error(json.error || 'Failed to rename subject');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Subject renamed', variant: 'success' });
+      qClient.invalidateQueries({ queryKey: ['subjects'] });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: 'destructive' }),
+  });
+
   const deleteChapter = useMutation({
     mutationFn: async (chapterId: string) => {
       const res = await fetch(`/api/chapters?id=${chapterId}`, { method: "DELETE" });
@@ -136,6 +154,23 @@ function SubjectCard({ subject }: { subject: Subject }) {
       setAddingUnit(false);
     },
     onError: (err: Error) => toast({ title: err.message, variant: "destructive" }),
+  });
+
+  const renameUnit = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await fetch('/api/units', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name: name.trim() })
+      });
+      if (!res.ok) { const json = await res.json(); throw new Error(json.error || 'Failed to rename unit'); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: 'Unit renamed', variant: 'success' });
+      qClient.invalidateQueries({ queryKey: ['subjects'] });
+      qClient.invalidateQueries({ queryKey: ['units', subject.id] });
+    },
+    onError: (err: Error) => toast({ title: err.message, variant: 'destructive' }),
   });
 
   const deleteUnit = useMutation({
@@ -178,6 +213,20 @@ function SubjectCard({ subject }: { subject: Subject }) {
           <Badge variant="secondary" className="text-xs">
             {subject._count?.questions ?? 0} Qs
           </Badge>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={(e) => {
+              e.stopPropagation();
+              const newName = prompt('Rename subject', subject.name);
+              if (!newName || !newName.trim() || newName.trim() === subject.name) return;
+              renameSubject.mutate(newName.trim());
+            }}
+            className="h-8 w-8 p-0"
+            aria-label={`Rename subject ${subject.name}`}
+          >
+            {renameSubject.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hash className="h-4 w-4" />}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -231,6 +280,11 @@ function SubjectCard({ subject }: { subject: Subject }) {
                             {expandedUnitId === unit.id ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
                           </Button>
                           <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                            onClick={(e) => { e.stopPropagation(); const newName = prompt('Rename unit', unit.name); if (!newName || !newName.trim() || newName.trim() === unit.name) return; renameUnit.mutate({ id: unit.id, name: newName.trim() }); }}
+                          >
+                            <Hash className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
                             onClick={(e) => { e.stopPropagation(); if (!confirm(`Delete unit "${unit.name}"? Chapters will be reassigned to 'Uncategorized'. Proceed?`)) return; deleteUnit.mutate(unit.id); }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -247,7 +301,18 @@ function SubjectCard({ subject }: { subject: Subject }) {
                                 <div key={ch.id} className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm">
                                   <span className="text-gray-700 font-medium truncate">{ch.name}</span>
                                   <Badge variant="outline" className="text-xs ml-2 shrink-0">{ch._count?.questions ?? 0} Qs</Badge>
-                                  <div className="ml-2">
+                                  <div className="ml-2 flex items-center gap-1">
+                                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                                      onClick={() => {
+                                        const newName = prompt('Rename chapter', ch.name);
+                                        if (!newName || !newName.trim() || newName.trim() === ch.name) return;
+                                        fetch('/api/chapters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ch.id, name: newName.trim() }) })
+                                          .then(async (res) => { if (!res.ok) { const json = await res.json(); throw new Error(json.error || 'Failed'); } toast({ title: 'Chapter renamed', variant: 'success' }); qClient.invalidateQueries({ queryKey: ['subjects'] }); qClient.invalidateQueries({ queryKey: ['units', subject.id] }); })
+                                          .catch((e) => toast({ title: e.message, variant: 'destructive' }));
+                                      }}
+                                    >
+                                      <Hash className="h-4 w-4" />
+                                    </Button>
                                     <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
                                       onClick={() => {
                                         if (!confirm(`Delete chapter "${ch.name}"? Questions (if any) will be moved to 'Uncategorized'. Proceed?`)) return;
@@ -353,7 +418,18 @@ function SubjectCard({ subject }: { subject: Subject }) {
                       <Badge variant="outline" className="text-xs ml-2 shrink-0">
                         {chapter._count?.questions ?? 0} Qs
                       </Badge>
-                      <div className="ml-2">
+                      <div className="ml-2 flex items-center gap-1">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => {
+                            const newName = prompt('Rename chapter', chapter.name);
+                            if (!newName || !newName.trim() || newName.trim() === chapter.name) return;
+                            fetch('/api/chapters', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: chapter.id, name: newName.trim() }) })
+                              .then(async (res) => { if (!res.ok) { const json = await res.json(); throw new Error(json.error || 'Failed'); } toast({ title: 'Chapter renamed', variant: 'success' }); qClient.invalidateQueries({ queryKey: ['subjects'] }); qClient.invalidateQueries({ queryKey: ['units', subject.id] }); })
+                              .catch((e) => toast({ title: e.message, variant: 'destructive' }));
+                          }}
+                        >
+                          <Hash className="h-4 w-4" />
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"

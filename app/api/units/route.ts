@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       include: {
         chapters: { orderBy: { name: "asc" } },
       },
-      orderBy: { name: "asc" },
+      orderBy: { createdAt: "asc" },
     });
 
     return NextResponse.json({ success: true, data: units });
@@ -76,6 +76,38 @@ export async function DELETE(req: NextRequest) {
   } catch (error: any) {
     if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     console.error("[UNITS DELETE]", error);
+    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+  }
+}
+
+// PATCH /api/units — rename unit (admin only)
+export async function PATCH(req: NextRequest) {
+  try {
+    const session = await requireAuth();
+    if (session.user.role !== "ADMIN") return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+
+    const body = await req.json();
+    const { id, name } = body;
+    if (!id || !name || typeof name !== 'string' || !name.trim()) return NextResponse.json({ success: false, error: 'Missing id or name' }, { status: 400 });
+
+    // fetch unit to know subjectId
+    const unit = await prisma.unit.findUnique({ where: { id } });
+    if (!unit) return NextResponse.json({ success: false, error: 'Unit not found' }, { status: 404 });
+
+    // validate name
+    const { unitSchema } = await import('@/lib/validations');
+    const parsed = unitSchema.pick({ name: true }).safeParse({ name: name.trim() });
+    if (!parsed.success) return NextResponse.json({ success: false, error: 'Validation failed', fields: parsed.error.flatten().fieldErrors }, { status: 400 });
+
+    // check duplicate within subject
+    const existing = await prisma.unit.findUnique({ where: { subjectId_name: { subjectId: unit.subjectId, name: parsed.data.name } } });
+    if (existing && existing.id !== id) return NextResponse.json({ success: false, error: 'Unit name already exists for this subject' }, { status: 409 });
+
+    const updated = await prisma.unit.update({ where: { id }, data: { name: parsed.data.name } });
+    return NextResponse.json({ success: true, data: updated });
+  } catch (error: any) {
+    if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    console.error("[UNITS PATCH]", error);
     return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
   }
 }
