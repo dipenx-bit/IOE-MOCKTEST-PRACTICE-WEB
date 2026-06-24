@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 interface Chapter {
   id:    string;
   name:  string;
+  unitId?: string | null;
   _count?: { questions: number };
 }
 interface Subject {
@@ -336,37 +337,41 @@ function SubjectCard({ subject }: { subject: Subject }) {
                 </div>
               )}
             </div>
-            {(subject.chapters ?? []).length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-3">No chapters yet.</p>
-            ) : (
-              <div className="grid sm:grid-cols-2 gap-2">
-                {(subject.chapters ?? []).map((chapter) => (
-                  <div
-                    key={chapter.id}
-                    className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm"
-                  >
-                    <span className="text-gray-700 font-medium truncate">{chapter.name}</span>
-                    <Badge variant="outline" className="text-xs ml-2 shrink-0">
-                      {chapter._count?.questions ?? 0} Qs
-                    </Badge>
-                    <div className="ml-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0"
-                        onClick={() => {
-                          if (!confirm(`Delete chapter "${chapter.name}"? Questions (if any) will be moved to 'Uncategorized'. Proceed?`)) return;
-                          deleteChapter.mutate(chapter.id);
-                        }}
-                        aria-label={`Delete chapter ${chapter.name}`}
-                      >
-                        {deleteChapter.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                      </Button>
+            {(() => {
+              const uncategorized = (subject.chapters ?? []).filter((c) => !c.unitId);
+              if (uncategorized.length === 0) {
+                return <p className="text-sm text-gray-400 text-center py-3">No chapters yet.</p>;
+              }
+              return (
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {uncategorized.map((chapter) => (
+                    <div
+                      key={chapter.id}
+                      className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200 text-sm"
+                    >
+                      <span className="text-gray-700 font-medium truncate">{chapter.name}</span>
+                      <Badge variant="outline" className="text-xs ml-2 shrink-0">
+                        {chapter._count?.questions ?? 0} Qs
+                      </Badge>
+                      <div className="ml-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={() => {
+                            if (!confirm(`Delete chapter "${chapter.name}"? Questions (if any) will be moved to 'Uncategorized'. Proceed?`)) return;
+                            deleteChapter.mutate(chapter.id);
+                          }}
+                          aria-label={`Delete chapter ${chapter.name}`}
+                        >
+                          {deleteChapter.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Add Chapter inline */}
             {adding ? (
