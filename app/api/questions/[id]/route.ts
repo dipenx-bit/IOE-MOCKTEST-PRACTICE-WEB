@@ -100,34 +100,64 @@ export async function DELETE(
   ctx: any
 ) {
   const { params } = ctx as any;
+  const id = params?.id;
+
+  console.info(`[QUESTION DELETE] incoming id=${id}`);
+
+  if (!id) {
+    console.error("[QUESTION DELETE] Missing id param");
+    return NextResponse.json({ success: false, error: "Missing question id" }, { status: 400 });
+  }
+
   try {
     const session = await requireAuth();
     if (session.user.role !== "ADMIN") {
       return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
     }
 
-    const existing = await prisma.question.findUnique({ where: { id: params.id } });
+    const existing = await prisma.question.findUnique({ where: { id } });
+    console.info(`[QUESTION DELETE] existing question lookup for id=${id}`, { exists: Boolean(existing) });
+
     if (!existing) {
       return NextResponse.json({ success: false, error: "Question not found" }, { status: 404 });
     }
 
-    // Remove dependent rows and delete question in a single transaction to avoid FK issues.
-    // Explicitly delete bookmarks too (even though Bookmark.question has onDelete: Cascade)
+    const [testQuestionCount, bookmarkCount] = await Promise.all([
+      prisma.testQuestion.count({ where: { questionId: id } }),
+      prisma.bookmark.count({ where: { questionId: id } }),
+    ]);
+    console.info(`[QUESTION DELETE] related counts for id=${id}`, { testQuestionCount, bookmarkCount });
+
     try {
       await prisma.$transaction([
-        prisma.testQuestion.deleteMany({ where: { questionId: params.id } }),
-        prisma.bookmark.deleteMany({ where: { questionId: params.id } }),
-        prisma.question.delete({ where: { id: params.id } }),
+        prisma.testQuestion.deleteMany({ where: { questionId: id } }),
+        prisma.bookmark.deleteMany({ where: { questionId: id } }),
+        prisma.question.delete({ where: { id } }),
       ]);
     } catch (dbErr: any) {
-      console.error("[QUESTION DELETE - DB ERROR]", dbErr);
-      return NextResponse.json({ success: false, error: dbErr?.message ?? "DB error" }, { status: 500 });
+      console.error("[QUESTION DELETE - DB ERROR]", {
+        questionId: id,
+        message: dbErr?.message,
+        stack: dbErr?.stack,
+      });
+      return NextResponse.json(
+        { success: false, error: dbErr?.message ?? "DB error" },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true, message: "Question deleted successfully" });
   } catch (error: any) {
-    if (error.message === "UNAUTHORIZED") return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-    console.error("[QUESTION DELETE]", error);
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 });
+    if (error.message === "UNAUTHORIZED") {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+    if (error.message === "FORBIDDEN") {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+    console.error("[QUESTION DELETE]", { message: error?.message, stack: error?.stack });
+    return NextResponse.json(
+      { success: false, error: error?.message ?? "Internal server error" },
+      { status: 500 }
+    );
   }
 }

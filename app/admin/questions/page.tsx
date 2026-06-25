@@ -537,15 +537,25 @@ export default function AdminQuestionsPage() {
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/questions/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Delete failed");
+      const res = await fetch(`/api/questions/${id}`, {
+        method: "DELETE",
+      });
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error ?? "Delete failed");
+      }
     },
     onSuccess: () => {
       toast({ title: "Question deleted", variant: "default" });
       qClient.invalidateQueries({ queryKey: ["admin-questions"] });
       setDeleteId(null);
     },
-    onError: () => toast({ title: "Failed to delete", variant: "destructive" }),
+    onError: (error: any) =>
+      toast({
+        title: error?.message ? `Failed to delete: ${error.message}` : "Failed to delete",
+        variant: "destructive",
+      }),
   });
 
   function handleEdit(q: Question) {

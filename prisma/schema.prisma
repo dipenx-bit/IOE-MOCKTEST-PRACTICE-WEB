@@ -38,20 +38,20 @@ model User {
   sex          Sex
   collegeName  String
 
-  tests        Test[]
-  bookmarks    Bookmark[]
-  studyStats   StudyStats?
+  tests      Test[]
+  bookmarks  Bookmark[]
+  studyStats StudyStats?
 
   @@map("users")
 }
 
 model Subject {
-  id        String    @id @default(cuid())
-  name      String    @unique
+  id        String     @id @default(cuid())
+  name      String     @unique
   chapters  Chapter[]
   questions Question[]
 
-  units     Unit[]
+  units Unit[]
 
   @@map("subjects")
 }
@@ -77,8 +77,8 @@ model Unit {
   name      String
   createdAt DateTime @default(now())
 
-  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  chapters  Chapter[]
+  subject  Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  chapters Chapter[]
 
   @@unique([subjectId, name])
   @@map("units")
@@ -93,7 +93,7 @@ model Question {
   optionB       String
   optionC       String
   optionD       String
-  correctOption String     // "A" | "B" | "C" | "D"
+  correctOption String // "A" | "B" | "C" | "D"
   explanation   String?
   difficulty    Difficulty @default(MEDIUM)
   marks         Int        @default(1)
@@ -144,13 +144,13 @@ model TestQuestion {
   id             String   @id @default(cuid())
   testId         String
   questionId     String
-  selectedAnswer String?  // "A" | "B" | "C" | "D" | null
+  selectedAnswer String? // "A" | "B" | "C" | "D" | null
   isCorrect      Boolean?
   markedReview   Boolean  @default(false)
   orderIndex     Int      @default(0)
 
   test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([testId, questionId])
   @@map("test_questions")
@@ -170,15 +170,15 @@ model Bookmark {
 }
 
 model StudyStats {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  testsAttempted   Int      @default(0)
-  questionsSolved  Int      @default(0)
-  averageScore     Float    @default(0)
-  bestScore        Float    @default(0)
-  currentStreak    Int      @default(0)
-  lastStudiedAt    DateTime?
-  updatedAt        DateTime @updatedAt
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  testsAttempted  Int       @default(0)
+  questionsSolved Int       @default(0)
+  averageScore    Float     @default(0)
+  bestScore       Float     @default(0)
+  currentStreak   Int       @default(0)
+  lastStudiedAt   DateTime?
+  updatedAt       DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
